@@ -658,8 +658,9 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
           }
           writer.forceMerge(cmd.maxOptimizeSegments);
         } else if (cmd.expungeDeletes) {
-          log.warn("Starting expungeDeletes... Reading and rewriting segments with enough deletes, potentially the entire index");
+          log.warn("Starting expungeDeletes of " + core.getName() + " ... Reading and rewriting segments with enough deletes, potentially the entire index");
           writer.forceMergeDeletes();
+          log.warn("Finished expungeDeletes of " + core.getName());
         }
         
         if (!cmd.softCommit) {
