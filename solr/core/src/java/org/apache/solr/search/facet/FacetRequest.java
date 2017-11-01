@@ -391,6 +391,8 @@ abstract class FacetParser<FacetRequestT extends FacetRequest> {
       return parseQueryFacet(key, args);
     } else if ("range".equals(type)) {
       return parseRangeFacet(key, args);
+    } else if ("function".equals(type)) {
+      return parseFunctionFacet(key, args);
     }
 
     AggValueSource stat = parseStat(key, type, args);
@@ -414,6 +416,11 @@ abstract class FacetParser<FacetRequestT extends FacetRequest> {
 
   FacetRange parseRangeFacet(String key, Object args) throws SyntaxError {
     FacetRangeParser parser = new FacetRangeParser(this, key);
+    return parser.parse(args);
+  }
+
+  FacetFunction parseFunctionFacet(String key, Object args) throws SyntaxError {
+    FacetFunctionParser parser = new FacetFunctionParser(this, key);
     return parser.parse(args);
   }
 
@@ -829,3 +836,36 @@ class FacetRangeParser extends FacetParser<FacetRange> {
 
 
 
+class FacetFunctionParser extends FacetParser<FacetFunction> {
+  public FacetFunctionParser(FacetParser parent, String key) {
+    super(parent, key);
+    facet = new FacetFunction();
+  }
+
+  @Override
+  public FacetFunction parse(Object arg) throws SyntaxError {
+    parseCommonParams(arg);
+
+    String fstring = null;
+    if (arg instanceof String) {
+      fstring = (String)arg;
+
+    } else if (arg instanceof Map) {
+      Map<String, Object> m = (Map<String, Object>) arg;
+      fstring = getString(m, "f", null);
+      if (fstring == null) {
+        fstring = getString(m, "function", null);
+      }
+
+      parseSubs( m.get("facet") );
+    }
+
+    if (fstring != null) {
+      FunctionQParser parser = (FunctionQParser)QParser.getParser(fstring, FunctionQParserPlugin.NAME, getSolrRequest());
+      parser.setIsFilter(true);
+      facet.valueSource = parser.parseValueSource();
+    }
+
+    return facet;
+  }
+}
