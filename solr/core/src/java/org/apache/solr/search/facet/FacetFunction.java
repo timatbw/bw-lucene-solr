@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.queries.function.FunctionValues;
@@ -62,22 +63,27 @@ class FacetFunctionMerger extends FacetRequestSortedMerger<FacetFunction> {
 
   @Override
   public void merge(Object facetResult, Context mcontext) {
-    // TODO
+    SimpleOrderedMap<Object> facetResultMap = (SimpleOrderedMap)facetResult;
+    List<SimpleOrderedMap> bucketList = (List<SimpleOrderedMap>)facetResultMap.get("buckets");
+    mergeBucketList(bucketList, mcontext);
   }
 
   @Override
   public void finish(Context mcontext) {
-    // TODO
+    // nothing more to do
   }
 
   @Override
   public Object getMergedResult() {
-    return null; // TODO
+    SimpleOrderedMap<Object> result = new SimpleOrderedMap<>();
+    result.add("buckets", buckets.values().stream().map(FacetBucket::getMergedBucket).collect(Collectors.toList()));
+    return result;
   }
 }
 
 class FacetFunctionProcessor extends FacetProcessor<FacetFunction> {
 
+  protected boolean firstPhase;
   protected int segBase = 0;
   protected FunctionValues functionValues;
   protected Map<Object, Bucket> buckets = new HashMap<>();
@@ -93,14 +99,22 @@ class FacetFunctionProcessor extends FacetProcessor<FacetFunction> {
     + " and doc count is " + fcontext.base.size()
     + " and class is " + fcontext.base.getClass().getName()
     + " and maxDoc is " + fcontext.searcher.maxDoc());
+
+    firstPhase = true;
     collect(fcontext.base, 0);
+    // TODO sorting
+
+    firstPhase = false;
     System.err.println("Bucket count is " + buckets.size());
     List<SimpleOrderedMap<Object>> bucketList = new ArrayList<>();
     for (Object key : buckets.keySet()) {
+      Bucket bucket = buckets.get(key);
       SimpleOrderedMap<Object> bucketResponse = new SimpleOrderedMap<>();
-      System.err.println("Bucket key '" + key + "' has DocSet with " + buckets.get(key).docSet.size());
-//    fillBucket(response, null, null, (fcontext.flags & FacetContext.SKIP_FACET)!=0, fcontext.facetInfo);
-      bucketResponse.add(key.toString(), buckets.get(key).docSet.size());
+      bucketResponse.add("val", key);
+      System.err.println("Bucket key '" + key + "' has DocSet with " + bucket.docSet.size());
+      // TODO send filter query
+      fillBucket(bucketResponse, null, bucket.docSet, (fcontext.flags & FacetContext.SKIP_FACET)!=0, fcontext.facetInfo);
+      // bucketResponse.add(key.toString(), buckets.docSet.size());
       bucketList.add(bucketResponse);
     }
     response = new SimpleOrderedMap<>();
@@ -109,17 +123,25 @@ class FacetFunctionProcessor extends FacetProcessor<FacetFunction> {
 
   @Override
   void collect(int segDoc, int slot) throws IOException {
-    Object objectVal = functionValues.objectVal(segDoc);
+    if (firstPhase) {
+      Object objectVal = functionValues.objectVal(segDoc);
 //    System.err.println("Called collect with segDoc " + segDoc + " and got objectValue " + objectVal + " of type " + objectVal.getClass().getName());
-    Bucket bucket = buckets.computeIfAbsent(objectVal, key -> new Bucket(key, fcontext.searcher.maxDoc()));
-    bucket.docSet.add(segDoc + segBase);
+      Bucket bucket = buckets.computeIfAbsent(objectVal, key -> new Bucket(key, fcontext.searcher.maxDoc()));
+      bucket.docSet.add(segDoc + segBase);
+    } else {
+      super.collect(segDoc, slot);
+    }
   }
 
   @Override
   void setNextReader(LeafReaderContext readerContext) throws IOException {
-    System.err.println("Given setNextReader with " + readerContext);
-    segBase = readerContext.docBase;
-    functionValues = freq.valueSource.getValues(fcontext.qcontext, readerContext);
+    if (firstPhase) {
+      System.err.println("Given setNextReader with " + readerContext);
+      segBase = readerContext.docBase;
+      functionValues = freq.valueSource.getValues(fcontext.qcontext, readerContext);
+    } else {
+      super.setNextReader(readerContext);
+    }
   }
 
   static class Bucket {
