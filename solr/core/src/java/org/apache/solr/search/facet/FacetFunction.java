@@ -25,8 +25,10 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.apache.lucene.index.LeafReaderContext;
+import org.apache.lucene.queries.function.FunctionRangeQuery;
 import org.apache.lucene.queries.function.FunctionValues;
 import org.apache.lucene.queries.function.ValueSource;
+import org.apache.lucene.search.Query;
 import org.apache.lucene.util.FixedBitSet;
 import org.apache.solr.common.util.SimpleOrderedMap;
 import org.apache.solr.search.BitDocSet;
@@ -75,8 +77,12 @@ class FacetFunctionMerger extends FacetRequestSortedMerger<FacetFunction> {
 
   @Override
   public Object getMergedResult() {
+    // TODO re-sorting and pagination
     SimpleOrderedMap<Object> result = new SimpleOrderedMap<>();
-    result.add("buckets", buckets.values().stream().map(FacetBucket::getMergedBucket).collect(Collectors.toList()));
+    result.add("buckets", buckets.values().stream()
+        .filter(b -> b.getCount() >= freq.mincount)
+        .map(FacetBucket::getMergedBucket)
+        .collect(Collectors.toList()));
     return result;
   }
 }
@@ -95,26 +101,26 @@ class FacetFunctionProcessor extends FacetProcessor<FacetFunction> {
   @Override
   public void process() throws IOException {
     super.process();
-    System.err.println("TPO calling process() for " + freq.valueSource.description()
-    + " and doc count is " + fcontext.base.size()
-    + " and class is " + fcontext.base.getClass().getName()
-    + " and maxDoc is " + fcontext.searcher.maxDoc());
 
     firstPhase = true;
     collect(fcontext.base, 0);
-    // TODO sorting
+    // TODO sorting and pagination and mincount filtering here
 
     firstPhase = false;
-    System.err.println("Bucket count is " + buckets.size());
     List<SimpleOrderedMap<Object>> bucketList = new ArrayList<>();
     for (Object key : buckets.keySet()) {
       Bucket bucket = buckets.get(key);
+      if (!fcontext.isShard() && bucket.getDocSet().size() < freq.mincount) {
+        continue;
+      }
       SimpleOrderedMap<Object> bucketResponse = new SimpleOrderedMap<>();
       bucketResponse.add("val", key);
-      System.err.println("Bucket key '" + key + "' has DocSet with " + bucket.docSet.size());
-      // TODO send filter query
-      fillBucket(bucketResponse, null, bucket.docSet, (fcontext.flags & FacetContext.SKIP_FACET)!=0, fcontext.facetInfo);
-      // bucketResponse.add(key.toString(), buckets.docSet.size());
+
+      // We're passing the computed DocSet for the bucket, but we'll also provide a Query to recreate it, although
+      // that should only be needed by the excludeTags logic
+      Query bucketFilter = new FunctionRangeQuery(freq.valueSource, key.toString(), key.toString(), true, true);
+      fillBucket(bucketResponse, bucketFilter, bucket.getDocSet(), (fcontext.flags & FacetContext.SKIP_FACET)!=0, fcontext.facetInfo);
+
       bucketList.add(bucketResponse);
     }
     response = new SimpleOrderedMap<>();
@@ -124,10 +130,13 @@ class FacetFunctionProcessor extends FacetProcessor<FacetFunction> {
   @Override
   void collect(int segDoc, int slot) throws IOException {
     if (firstPhase) {
+      // Sift the documents into buckets, 1 bucket per distinct result value from the function
       Object objectVal = functionValues.objectVal(segDoc);
-//    System.err.println("Called collect with segDoc " + segDoc + " and got objectValue " + objectVal + " of type " + objectVal.getClass().getName());
-      Bucket bucket = buckets.computeIfAbsent(objectVal, key -> new Bucket(key, fcontext.searcher.maxDoc()));
-      bucket.docSet.add(segDoc + segBase);
+      if (objectVal == null) {
+        return; // TODO consider a 'missing' bucket for these?
+      }
+      Bucket bucket = buckets.computeIfAbsent(objectVal, key -> new Bucket(key, fcontext.searcher.maxDoc(), fcontext.base.size()));
+      bucket.addDoc(segDoc + segBase);
     } else {
       super.collect(segDoc, slot);
     }
@@ -136,7 +145,6 @@ class FacetFunctionProcessor extends FacetProcessor<FacetFunction> {
   @Override
   void setNextReader(LeafReaderContext readerContext) throws IOException {
     if (firstPhase) {
-      System.err.println("Given setNextReader with " + readerContext);
       segBase = readerContext.docBase;
       functionValues = freq.valueSource.getValues(fcontext.qcontext, readerContext);
     } else {
@@ -145,10 +153,20 @@ class FacetFunctionProcessor extends FacetProcessor<FacetFunction> {
   }
 
   static class Bucket {
-    DocSet docSet;
+    private DocSet docSet;
 
-    Bucket(Object key, int maxSize) {
-      docSet = new BitDocSet(new FixedBitSet(maxSize)); // TODO FixedBitSet is expensive
+    // maxDoc and parentSize help decide what kind of DocSet to use.
+    // parentSize is an upper bound on how many docs will be added to this bucket
+    Bucket(Object key, int maxDoc, int parentSize) {
+      docSet = new BitDocSet(new FixedBitSet(maxDoc)); // TODO FixedBitSet is expensive
+    }
+
+    void addDoc(int doc) {
+      docSet.add(doc);
+    }
+
+    DocSet getDocSet() {
+      return docSet;
     }
   }
 }
