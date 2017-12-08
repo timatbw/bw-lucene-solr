@@ -19,9 +19,11 @@ package org.apache.solr.search.facet;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import org.apache.lucene.index.LeafReaderContext;
@@ -38,6 +40,11 @@ import org.apache.solr.search.HashDocSet;
 public class FacetFunction extends FacetRequestSorted {
 
   ValueSource valueSource;
+
+  public FacetFunction() {
+    mincount = 1;
+    limit = -1;
+  }
 
   @Override
   public FacetProcessor createFacetProcessor(FacetContext fcontext) {
@@ -77,12 +84,17 @@ class FacetFunctionMerger extends FacetRequestSortedMerger<FacetFunction> {
 
   @Override
   public Object getMergedResult() {
-    // TODO re-sorting and pagination
     SimpleOrderedMap<Object> result = new SimpleOrderedMap<>();
+
+    /*
     result.add("buckets", buckets.values().stream()
         .filter(b -> b.getCount() >= freq.mincount)
         .map(FacetBucket::getMergedBucket)
         .collect(Collectors.toList()));
+        */
+
+    sortBuckets();
+    result.add("buckets", getPaginatedBuckets());
     return result;
   }
 }
@@ -104,15 +116,17 @@ class FacetFunctionProcessor extends FacetProcessor<FacetFunction> {
 
     firstPhase = true;
     collect(fcontext.base, 0);
-    // TODO sorting and pagination and mincount filtering here
 
     firstPhase = false;
-    List<SimpleOrderedMap<Object>> bucketList = new ArrayList<>();
-    for (Object key : buckets.keySet()) {
-      Bucket bucket = buckets.get(key);
-      if (!fcontext.isShard() && bucket.getDocSet().size() < freq.mincount) {
-        continue;
-      }
+    Comparator<Bucket> bucketComparator = getComparator();
+    List<Bucket> sortedBuckets = buckets.values().stream()
+        .filter(bucket -> fcontext.isShard() || bucket.getCount() >= freq.mincount)
+        .sorted(bucketComparator)
+        .collect(Collectors.toList());
+
+    List<SimpleOrderedMap<Object>> responseBuckets = new ArrayList<>();
+    for (Bucket bucket : sortedBuckets) {
+      Object key = bucket.getKey();
       SimpleOrderedMap<Object> bucketResponse = new SimpleOrderedMap<>();
       bucketResponse.add("val", key);
 
@@ -121,10 +135,27 @@ class FacetFunctionProcessor extends FacetProcessor<FacetFunction> {
       Query bucketFilter = new FunctionRangeQuery(freq.valueSource, key.toString(), key.toString(), true, true);
       fillBucket(bucketResponse, bucketFilter, bucket.getDocSet(), (fcontext.flags & FacetContext.SKIP_FACET)!=0, fcontext.facetInfo);
 
-      bucketList.add(bucketResponse);
+      responseBuckets.add(bucketResponse);
     }
+
     response = new SimpleOrderedMap<>();
-    response.add("buckets", bucketList);
+    response.add("buckets", responseBuckets);
+  }
+
+  private Comparator<Bucket> getComparator() {
+    Comparator<Bucket> bucketComparator;
+    if ("count".equals(freq.sortVariable)) {
+      bucketComparator = Bucket.COUNT_COMPARATOR.thenComparing(Bucket.KEY_COMPARATOR);
+    } else if ("index".equals(freq.sortVariable)) {
+      bucketComparator = Bucket.KEY_COMPARATOR;
+    } else {
+      throw new RuntimeException("Functional sorting not yet supported"); // TODO
+    }
+    if (FacetRequest.SortDirection.desc.equals(freq.sortDirection)) {
+      return bucketComparator.reversed();
+    } else {
+      return bucketComparator;
+    }
   }
 
   @Override
@@ -153,12 +184,26 @@ class FacetFunctionProcessor extends FacetProcessor<FacetFunction> {
   }
 
   static class Bucket {
+
+    static final Comparator<Bucket> KEY_COMPARATOR = (b1, b2) -> ((Comparable)b1.getKey()).compareTo(b2.getKey());
+    static final Comparator<Bucket> COUNT_COMPARATOR = (b1, b2) -> Integer.compare(b1.getCount(), b2.getCount());
+
+    private Object key;
     private DocSet docSet;
 
     // maxDoc and parentSize help decide what kind of DocSet to use.
     // parentSize is an upper bound on how many docs will be added to this bucket
     Bucket(Object key, int maxDoc, int parentSize) {
+      this.key = key;
       docSet = new BitDocSet(new FixedBitSet(maxDoc)); // TODO FixedBitSet is expensive
+    }
+
+    Object getKey() {
+      return key;
+    }
+
+    int getCount() {
+      return docSet.size();
     }
 
     void addDoc(int doc) {

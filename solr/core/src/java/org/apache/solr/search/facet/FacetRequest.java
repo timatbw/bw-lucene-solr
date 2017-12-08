@@ -591,6 +591,47 @@ abstract class FacetParser<FacetRequestT extends FacetRequest> {
     return parent.getSolrRequest();
   }
 
+  protected void parsePagination(FacetRequestSorted sortedFacet, Map<String, Object> m) {
+    sortedFacet.offset = getLong(m, "offset", sortedFacet.offset);
+    sortedFacet.limit = getLong(m, "limit", sortedFacet.limit);
+    sortedFacet.overrequest = (int) getLong(m, "overrequest", sortedFacet.overrequest);
+    if (sortedFacet.limit == 0) sortedFacet.offset = 0;  // normalize.  an offset with a limit of non-zero isn't useful.
+    sortedFacet.mincount = getLong(m, "mincount", sortedFacet.mincount);
+  }
+
+  // Sort specification is currently
+  // sort : 'mystat desc'
+  // OR
+  // sort : { mystat : 'desc' }
+  protected void parseSort(FacetRequestSorted sortedFacet, Object sort) {
+    if (sort == null) {
+      sortedFacet.sortVariable = "count";
+      sortedFacet.sortDirection = FacetRequest.SortDirection.desc;
+    } else if (sort instanceof String) {
+      String sortStr = (String)sort;
+      if (sortStr.endsWith(" asc")) {
+        sortedFacet.sortVariable = sortStr.substring(0, sortStr.length()-" asc".length());
+        sortedFacet.sortDirection = FacetRequest.SortDirection.asc;
+      } else if (sortStr.endsWith(" desc")) {
+        sortedFacet.sortVariable = sortStr.substring(0, sortStr.length()-" desc".length());
+        sortedFacet.sortDirection = FacetRequest.SortDirection.desc;
+      } else {
+        sortedFacet.sortVariable = sortStr;
+        sortedFacet.sortDirection = "index".equals(sortedFacet.sortVariable) ? FacetRequest.SortDirection.asc : FacetRequest.SortDirection.desc;  // default direction for "index" is ascending
+      }
+    } else {
+      // sort : { myvar : 'desc' }
+      Map<String,Object> map = (Map<String,Object>)sort;
+      // TODO: validate
+      Map.Entry<String,Object> entry = map.entrySet().iterator().next();
+      String k = entry.getKey();
+      Object v = entry.getValue();
+      sortedFacet.sortVariable = k;
+      sortedFacet.sortDirection = FacetRequest.SortDirection.valueOf(v.toString());
+    }
+
+  }
+
 }
 
 
@@ -697,74 +738,38 @@ class FacetFieldParser extends FacetParser<FacetField> {
     parseCommonParams(arg);
     if (arg instanceof String) {
       // just the field name...
-      facet.field = (String)arg;
-      parseSort( null );  // TODO: defaults
+      facet.field = (String) arg;
+      parseSort(facet,null);  // TODO: defaults
 
     } else if (arg instanceof Map) {
       Map<String, Object> m = (Map<String, Object>) arg;
       facet.field = getField(m);
-      facet.offset = getLong(m, "offset", facet.offset);
-      facet.limit = getLong(m, "limit", facet.limit);
-      facet.overrequest = (int) getLong(m, "overrequest", facet.overrequest);
-      if (facet.limit == 0) facet.offset = 0;  // normalize.  an offset with a limit of non-zero isn't useful.
-      facet.mincount = getLong(m, "mincount", facet.mincount);
+      parsePagination(facet, m);
       facet.missing = getBoolean(m, "missing", facet.missing);
       facet.numBuckets = getBoolean(m, "numBuckets", facet.numBuckets);
       facet.prefix = getString(m, "prefix", facet.prefix);
       facet.allBuckets = getBoolean(m, "allBuckets", facet.allBuckets);
       facet.method = FacetField.FacetMethod.fromString(getString(m, "method", null));
-      facet.cacheDf = (int)getLong(m, "cacheDf", facet.cacheDf);
+      facet.cacheDf = (int) getLong(m, "cacheDf", facet.cacheDf);
 
       // TODO: pull up to higher level?
       facet.refine = FacetField.RefineMethod.fromObj(m.get("refine"));
 
-      facet.perSeg = (Boolean)m.get("perSeg");
+      facet.perSeg = (Boolean) m.get("perSeg");
 
       // facet.sort may depend on a facet stat...
       // should we be parsing / validating this here, or in the execution environment?
       Object o = m.get("facet");
       parseSubs(o);
 
-      parseSort( m.get(SORT) );
+      parseSort(facet, m.get(SORT));
     }
 
     return facet;
   }
-
-
-  // Sort specification is currently
-  // sort : 'mystat desc'
-  // OR
-  // sort : { mystat : 'desc' }
-  private void parseSort(Object sort) {
-    if (sort == null) {
-      facet.sortVariable = "count";
-      facet.sortDirection = FacetRequest.SortDirection.desc;
-    } else if (sort instanceof String) {
-      String sortStr = (String)sort;
-      if (sortStr.endsWith(" asc")) {
-        facet.sortVariable = sortStr.substring(0, sortStr.length()-" asc".length());
-        facet.sortDirection = FacetRequest.SortDirection.asc;
-      } else if (sortStr.endsWith(" desc")) {
-        facet.sortVariable = sortStr.substring(0, sortStr.length()-" desc".length());
-        facet.sortDirection = FacetRequest.SortDirection.desc;
-      } else {
-        facet.sortVariable = sortStr;
-        facet.sortDirection = "index".equals(facet.sortVariable) ? FacetRequest.SortDirection.asc : FacetRequest.SortDirection.desc;  // default direction for "index" is ascending
-      }
-    } else {
-     // sort : { myvar : 'desc' }
-      Map<String,Object> map = (Map<String,Object>)sort;
-      // TODO: validate
-      Map.Entry<String,Object> entry = map.entrySet().iterator().next();
-      String k = entry.getKey();
-      Object v = entry.getValue();
-      facet.sortVariable = k;
-      facet.sortDirection = FacetRequest.SortDirection.valueOf(v.toString());
-    }
-
-  }
 }
+
+
 
 
 
@@ -857,7 +862,11 @@ class FacetFunctionParser extends FacetParser<FacetFunction> {
         fstring = getString(m, "function", null);
       }
 
+      parsePagination(facet, m);
+
       parseSubs( m.get("facet") );
+
+      parseSort(facet, m.get(SORT));
     }
 
     if (fstring != null) {
