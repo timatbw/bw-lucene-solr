@@ -35,6 +35,7 @@ import org.apache.lucene.util.FixedBitSet;
 import org.apache.solr.common.util.SimpleOrderedMap;
 import org.apache.solr.search.BitDocSet;
 import org.apache.solr.search.DocSet;
+import org.apache.solr.search.DocSetBuilder;
 import org.apache.solr.search.HashDocSet;
 
 public class FacetFunction extends FacetRequestSorted {
@@ -85,14 +86,6 @@ class FacetFunctionMerger extends FacetRequestSortedMerger<FacetFunction> {
   @Override
   public Object getMergedResult() {
     SimpleOrderedMap<Object> result = new SimpleOrderedMap<>();
-
-    /*
-    result.add("buckets", buckets.values().stream()
-        .filter(b -> b.getCount() >= freq.mincount)
-        .map(FacetBucket::getMergedBucket)
-        .collect(Collectors.toList()));
-        */
-
     sortBuckets();
     result.add("buckets", getPaginatedBuckets());
     return result;
@@ -122,6 +115,9 @@ class FacetFunctionProcessor extends FacetProcessor<FacetFunction> {
     List<Bucket> sortedBuckets = buckets.values().stream()
         .filter(bucket -> fcontext.isShard() || bucket.getCount() >= freq.mincount)
         .sorted(bucketComparator)
+        .skip(fcontext.isShard() ? 0 : freq.offset)
+        // TODO refactor calculation of effectiveLimit using overrequest and use here
+        .limit(fcontext.isShard() || freq.limit < 0 ? Integer.MAX_VALUE : freq.limit)
         .collect(Collectors.toList());
 
     List<SimpleOrderedMap<Object>> responseBuckets = new ArrayList<>();
@@ -188,14 +184,20 @@ class FacetFunctionProcessor extends FacetProcessor<FacetFunction> {
     static final Comparator<Bucket> KEY_COMPARATOR = (b1, b2) -> ((Comparable)b1.getKey()).compareTo(b2.getKey());
     static final Comparator<Bucket> COUNT_COMPARATOR = (b1, b2) -> Integer.compare(b1.getCount(), b2.getCount());
 
-    private Object key;
+    private final Object key;
+    private final DocSetBuilder docSetBuilder;
     private DocSet docSet;
 
     // maxDoc and parentSize help decide what kind of DocSet to use.
     // parentSize is an upper bound on how many docs will be added to this bucket
     Bucket(Object key, int maxDoc, int parentSize) {
       this.key = key;
-      docSet = new BitDocSet(new FixedBitSet(maxDoc)); // TODO FixedBitSet is expensive
+
+      // Crossover point where bitset more space-efficient than sorted ints is maxDoc >> 5
+      // i.e. 32 bit int vs 1 bit
+      // builder uses >>> 7 on maxDoc as its threshold, hence we'll use >> 2 on our
+      // expected upper bound of doc set size
+      this.docSetBuilder = new DocSetBuilder(maxDoc, parentSize >> 2);
     }
 
     Object getKey() {
@@ -203,14 +205,17 @@ class FacetFunctionProcessor extends FacetProcessor<FacetFunction> {
     }
 
     int getCount() {
-      return docSet.size();
+      return getDocSet().size();
     }
 
     void addDoc(int doc) {
-      docSet.add(doc);
+      docSetBuilder.add(doc);
     }
 
     DocSet getDocSet() {
+      if (docSet == null) {
+        docSet = docSetBuilder.buildUniqueInOrder(null);
+      }
       return docSet;
     }
   }
