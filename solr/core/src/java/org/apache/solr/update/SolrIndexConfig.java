@@ -372,16 +372,16 @@ public class SolrIndexConfig implements MapSerializable {
       // LUCENE-5080: these two setters are removed, so we have to invoke setMaxMergesAndThreads
       // if someone has them configured.
       if (scheduler instanceof ConcurrentMergeScheduler) {
+        ConcurrentMergeScheduler cmScheduler = (ConcurrentMergeScheduler) scheduler;
         NamedList args = mergeSchedulerInfo.initArgs.clone();
         Integer maxMergeCount = (Integer) args.remove("maxMergeCount");
         if (maxMergeCount == null) {
-          maxMergeCount = ((ConcurrentMergeScheduler) scheduler).getMaxMergeCount();
+          maxMergeCount = cmScheduler.getMaxMergeCount();
         }
         Integer maxThreadCount = (Integer) args.remove("maxThreadCount");
         if (maxThreadCount == null) {
-          maxThreadCount = ((ConcurrentMergeScheduler) scheduler).getMaxThreadCount();
+          maxThreadCount = cmScheduler.getMaxThreadCount();
         }
-        ConcurrentMergeScheduler cmScheduler = (ConcurrentMergeScheduler)scheduler;
         cmScheduler.setMaxMergesAndThreads(maxMergeCount, maxThreadCount);
         Boolean autoIOThrottle = (Boolean) args.remove("autoIOThrottle");
         if (autoIOThrottle != null) {
