@@ -118,7 +118,7 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
   protected double targetMBPerSec = START_MB_PER_SEC;
 
   /** true if we should rate-limit writes for each merge */
-  private boolean doAutoIOThrottle = true;
+  private boolean doAutoIOThrottle = false;
 
   private double forceMergeMBPerSec = Double.POSITIVE_INFINITY;
 
