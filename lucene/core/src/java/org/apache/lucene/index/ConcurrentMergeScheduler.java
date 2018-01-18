@@ -121,6 +121,9 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
 
   private double forceMergeMBPerSec = Double.POSITIVE_INFINITY;
 
+  /** Write throttle rate when doAutoIOThrottle is false */
+  private double fixedMergeMBPerSec = Double.POSITIVE_INFINITY;
+
   /** Sole constructor, with all settings set to default
    *  values. */
   public ConcurrentMergeScheduler() {
@@ -224,13 +227,23 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
     return doAutoIOThrottle;
   }
 
+  /** Set the per-merge IO throttle rate when auto IO throttling is disabled (default: {@code Double.POSITIVE_INFINITY}). */
+  public synchronized void setFixedMergeMBPerSec(double v) {
+    fixedMergeMBPerSec = v;
+  }
+
+  /** Get the per-merge IO throttle rate when auto IO throttling is disabled. */
+  public synchronized double getFixedMergeMBPerSec() {
+    return fixedMergeMBPerSec;
+  }
+
   /** Returns the currently set per-merge IO writes rate limit, if {@link #enableAutoIOThrottle}
-   *  was called, else {@code Double.POSITIVE_INFINITY}. */
+   *  was called, else {@link #getFixedMergeMBPerSec}. */
   public synchronized double getIORateLimitMBPerSec() {
     if (doAutoIOThrottle) {
       return targetMBPerSec;
     } else {
-      return Double.POSITIVE_INFINITY;
+      return fixedMergeMBPerSec;
     }
   }
 
@@ -354,10 +367,10 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
       } else if (merge.maxNumSegments != -1) {
         newMBPerSec = forceMergeMBPerSec;
       } else if (doAutoIOThrottle == false) {
-        newMBPerSec = Double.POSITIVE_INFINITY;
+        newMBPerSec = fixedMergeMBPerSec;
       } else if (merge.estimatedMergeBytes < MIN_BIG_MERGE_MB*1024*1024) {
         // Don't rate limit small merges:
-        newMBPerSec = Double.POSITIVE_INFINITY;
+        newMBPerSec = fixedMergeMBPerSec;
       } else {
         newMBPerSec = targetMBPerSec;
       }
@@ -385,7 +398,7 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
           if (newMBPerSec == 0.0) {
             message.append("  now stop");
           } else if (curMBPerSec == 0.0) {
-            if (newMBPerSec == Double.POSITIVE_INFINITY) {
+            if (newMBPerSec == fixedMergeMBPerSec) {
               message.append("  now resume");
             } else {
               message.append(String.format(Locale.ROOT, "  now resume to %.1f MB/sec", newMBPerSec));
@@ -427,10 +440,10 @@ public class ConcurrentMergeScheduler extends MergeScheduler {
     }
   }
 
-  private static String rateToString(double mbPerSec) {
+  private String rateToString(double mbPerSec) {
     if (mbPerSec == 0.0) {
       return "stopped";
-    } else if (mbPerSec == Double.POSITIVE_INFINITY) {
+    } else if (mbPerSec == fixedMergeMBPerSec) {
       return "unlimited";
     } else {
       return String.format(Locale.ROOT, "%.1f MB/sec", mbPerSec);
