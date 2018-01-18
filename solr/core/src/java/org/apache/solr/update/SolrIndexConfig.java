@@ -381,7 +381,16 @@ public class SolrIndexConfig implements MapSerializable {
         if (maxThreadCount == null) {
           maxThreadCount = ((ConcurrentMergeScheduler) scheduler).getMaxThreadCount();
         }
-        ((ConcurrentMergeScheduler)scheduler).setMaxMergesAndThreads(maxMergeCount, maxThreadCount);
+        ConcurrentMergeScheduler cmScheduler = (ConcurrentMergeScheduler)scheduler;
+        cmScheduler.setMaxMergesAndThreads(maxMergeCount, maxThreadCount);
+        Boolean autoIOThrottle = (Boolean) args.remove("autoIOThrottle");
+        if (autoIOThrottle != null) {
+          if (autoIOThrottle) {
+            cmScheduler.enableAutoIOThrottle();
+          } else {
+            cmScheduler.disableAutoIOThrottle();
+          }
+        }
         SolrPluginUtils.invokeSetters(scheduler, args);
       } else {
         SolrPluginUtils.invokeSetters(scheduler, mergeSchedulerInfo.initArgs);
