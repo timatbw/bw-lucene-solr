@@ -23,7 +23,6 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.stream.Collectors;
 
 import org.apache.lucene.index.LeafReaderContext;
@@ -31,12 +30,10 @@ import org.apache.lucene.queries.function.FunctionRangeQuery;
 import org.apache.lucene.queries.function.FunctionValues;
 import org.apache.lucene.queries.function.ValueSource;
 import org.apache.lucene.search.Query;
-import org.apache.lucene.util.FixedBitSet;
+import org.apache.solr.common.SolrException;
 import org.apache.solr.common.util.SimpleOrderedMap;
-import org.apache.solr.search.BitDocSet;
 import org.apache.solr.search.DocSet;
 import org.apache.solr.search.DocSetBuilder;
-import org.apache.solr.search.HashDocSet;
 
 public class FacetFunction extends FacetRequestSorted {
 
@@ -98,9 +95,12 @@ class FacetFunctionProcessor extends FacetProcessor<FacetFunction> {
   protected int segBase = 0;
   protected FunctionValues functionValues;
   protected Map<Object, Bucket> buckets = new HashMap<>();
+  protected Comparator<Bucket> comparator;
+  protected boolean isSortingByStat;
 
   FacetFunctionProcessor(FacetContext fcontext, FacetFunction freq) {
     super(fcontext, freq);
+    chooseComparator();
   }
 
   @Override
@@ -111,46 +111,52 @@ class FacetFunctionProcessor extends FacetProcessor<FacetFunction> {
     collect(fcontext.base, 0);
 
     firstPhase = false;
-    Comparator<Bucket> bucketComparator = getComparator();
-    List<Bucket> sortedBuckets = buckets.values().stream()
-        .filter(bucket -> fcontext.isShard() || bucket.getCount() >= freq.mincount)
-        .sorted(bucketComparator)
-        .skip(fcontext.isShard() ? 0 : freq.offset)
-        // TODO refactor calculation of effectiveLimit using overrequest and use here
-        .limit(fcontext.isShard() || freq.limit < 0 ? Integer.MAX_VALUE : freq.limit)
-        .collect(Collectors.toList());
-
-    List<SimpleOrderedMap<Object>> responseBuckets = new ArrayList<>();
-    for (Bucket bucket : sortedBuckets) {
+    ArrayList<Bucket> bucketList = new ArrayList<>();
+    for (Bucket bucket : buckets.values()) {
+      if (!fcontext.isShard() && bucket.getCount() < freq.mincount) {
+        continue;
+      }
       Object key = bucket.getKey();
-      SimpleOrderedMap<Object> bucketResponse = new SimpleOrderedMap<>();
-      bucketResponse.add("val", key);
+      bucket.response = new SimpleOrderedMap<>();
+      bucket.response.add("val", key);
 
       // We're passing the computed DocSet for the bucket, but we'll also provide a Query to recreate it, although
       // that should only be needed by the excludeTags logic
       Query bucketFilter = new FunctionRangeQuery(freq.valueSource, key.toString(), key.toString(), true, true);
-      fillBucket(bucketResponse, bucketFilter, bucket.getDocSet(), (fcontext.flags & FacetContext.SKIP_FACET)!=0, fcontext.facetInfo);
-
-      responseBuckets.add(bucketResponse);
+      countAcc = null;
+      fillBucket(bucket.response, bucketFilter, bucket.getDocSet(), (fcontext.flags & FacetContext.SKIP_FACET)!=0, fcontext.facetInfo);
+      if (isSortingByStat) {
+        bucket.sortValue = accMap.get(freq.sortVariable).getValue(0);
+      }
+      bucketList.add(bucket);
     }
+
+    List<SimpleOrderedMap<Object>> responseBuckets = bucketList.stream()
+        .sorted(comparator)
+        .skip(fcontext.isShard() ? 0 : freq.offset)
+        // TODO refactor calculation of effectiveLimit using overrequest and use here
+        .limit(fcontext.isShard() || freq.limit < 0 ? Integer.MAX_VALUE : freq.limit)
+        .map(bucket -> bucket.response)
+        .collect(Collectors.toList());
 
     response = new SimpleOrderedMap<>();
     response.add("buckets", responseBuckets);
   }
 
-  private Comparator<Bucket> getComparator() {
-    Comparator<Bucket> bucketComparator;
+  private void chooseComparator() {
     if ("count".equals(freq.sortVariable)) {
-      bucketComparator = Bucket.COUNT_COMPARATOR.thenComparing(Bucket.KEY_COMPARATOR);
+      comparator = Bucket.COUNT_COMPARATOR.thenComparing(Bucket.KEY_COMPARATOR);
     } else if ("index".equals(freq.sortVariable)) {
-      bucketComparator = Bucket.KEY_COMPARATOR;
+      comparator = Bucket.KEY_COMPARATOR;
+    } else if (freq.getFacetStats().containsKey(freq.sortVariable)) {
+      comparator = Bucket.SORTSTAT_COMPARATOR.thenComparing(Bucket.KEY_COMPARATOR);
+      isSortingByStat = true;
     } else {
-      throw new RuntimeException("Functional sorting not yet supported"); // TODO
+      throw new SolrException(SolrException.ErrorCode.BAD_REQUEST,
+          "Unknown facet sort value " + freq.sortVariable);
     }
     if (FacetRequest.SortDirection.desc.equals(freq.sortDirection)) {
-      return bucketComparator.reversed();
-    } else {
-      return bucketComparator;
+      comparator = comparator.reversed();
     }
   }
 
@@ -183,10 +189,19 @@ class FacetFunctionProcessor extends FacetProcessor<FacetFunction> {
 
     static final Comparator<Bucket> KEY_COMPARATOR = (b1, b2) -> ((Comparable)b1.getKey()).compareTo(b2.getKey());
     static final Comparator<Bucket> COUNT_COMPARATOR = (b1, b2) -> Integer.compare(b1.getCount(), b2.getCount());
+    static final Comparator<Bucket> SORTSTAT_COMPARATOR = (b1, b2) -> {
+      if (b1.sortValue == null || b2.sortValue == null) {
+        return 0;
+      } else {
+        return ((Comparable)b1.sortValue).compareTo(b2.sortValue);
+      }
+    };
 
     private final Object key;
     private final DocSetBuilder docSetBuilder;
     private DocSet docSet;
+    Object sortValue;
+    SimpleOrderedMap<Object> response;
 
     // maxDoc and parentSize help decide what kind of DocSet to use.
     // parentSize is an upper bound on how many docs will be added to this bucket
