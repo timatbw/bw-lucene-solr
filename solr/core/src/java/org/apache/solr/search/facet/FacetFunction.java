@@ -144,7 +144,7 @@ class FacetFunctionProcessor extends FacetProcessor<FacetFunction> {
   }
 
   private void chooseComparator() {
-    if ("count".equals(freq.sortVariable)) {
+    if ("count".equals(freq.sortVariable) || fcontext.isShard()) {
       comparator = Bucket.COUNT_COMPARATOR.thenComparing(Bucket.KEY_COMPARATOR);
     } else if ("index".equals(freq.sortVariable)) {
       comparator = Bucket.KEY_COMPARATOR;
