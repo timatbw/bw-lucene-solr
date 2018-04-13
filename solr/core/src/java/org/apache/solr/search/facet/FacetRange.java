@@ -24,6 +24,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.lucene.index.LeafReaderContext;
+import org.apache.lucene.queries.function.FunctionValues;
+import org.apache.lucene.queries.function.ValueSource;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.util.NumericUtils;
 import org.apache.solr.common.SolrException;
@@ -45,6 +48,7 @@ public class FacetRange extends FacetRequestSorted {
   boolean hardend = false;
   EnumSet<FacetParams.FacetRangeInclude> include;
   EnumSet<FacetParams.FacetRangeOther> others;
+  String method; // TODO enum
 
   {
     // defaults
@@ -298,14 +302,11 @@ class FacetRangeProcessor extends FacetProcessor<FacetRange> {
 
     createAccs(fcontext.base.size(), slotCount);
 
-    for (int idx = 0; idx<rangeList.size(); idx++) {
-      rangeStats(rangeList.get(idx), idx);
+    if ("dvhash".equals(freq.method)) {
+      rangeStatsByDocValues();
+    } else {
+      rangeStatsByQuery();
     }
-
-    for (int idx = 0; idx<otherList.size(); idx++) {
-      rangeStats(otherList.get(idx), rangeList.size() + idx);
-    }
-
 
     final SimpleOrderedMap res = new SimpleOrderedMap<>();
     List<SimpleOrderedMap> buckets = new ArrayList<>();
@@ -335,14 +336,64 @@ class FacetRangeProcessor extends FacetProcessor<FacetRange> {
 
   private Query[] filters;
   private DocSet[] intersections;
+
+  @Override
+  void collect(int segDoc, int slot) throws IOException {
+    if (slot != -1) {
+      super.collect(segDoc, slot);
+      return;
+    }
+  }
+
+  @Override
+  void setNextReader(LeafReaderContext ctx) throws IOException {
+//    super.setNextReader(ctx);
+    ValueSource valueSource = sf.getType().getValueSource(sf, null);
+    FunctionValues values = valueSource.getValues(fcontext.qcontext, ctx);
+
+
+  }
+
+  // Gathers the stats by making a single pass over the base DocSet, using
+  // the docValue for the field to sift into the appropriate Range buckets.
+  // Suitable when the gap leads to many interval buckets, especially if this is a
+  // subfacet inside a parent with many buckets of its own. However, this method
+  // can be slower if the base DocSet is big
+  private void rangeStatsByDocValues() throws IOException {
+
+    // TODO maintain map from Range objects to DocSet+slotNum buckets
+    // with quick lookup given a value to one of the Ranges
+
+    // collect fcontext.base using fcontext.searcher
+
+    // populate all filters and intersections
+
+    // call collect(DocSet, slot) on each of those
+  }
+
+  // Gathers the stats for each Range bucket by using a RangeQuery to run a search.
+  // Suitable when the number of buckets is fairly low, or the base DocSet is big
+  private void rangeStatsByQuery() throws IOException {
+    for (int idx = 0; idx<rangeList.size(); idx++) {
+      rangeStats(rangeList.get(idx), idx);
+    }
+
+    for (int idx = 0; idx<otherList.size(); idx++) {
+      rangeStats(otherList.get(idx), rangeList.size() + idx);
+    }
+  }
+
   private void rangeStats(Range range, int slot) throws IOException {
-    Query rangeQ = sf.getType().getRangeQuery(null, sf, range.low == null ? null : calc.formatValue(range.low), range.high==null ? null : calc.formatValue(range.high), range.includeLower, range.includeUpper);
+    filters[slot] = buildRangeQuery(range);
     // TODO: specialize count only
-    DocSet intersection = fcontext.searcher.getDocSet(rangeQ, fcontext.base);
-    filters[slot] = rangeQ;
+    DocSet intersection = fcontext.searcher.getDocSet(filters[slot], fcontext.base);
     intersections[slot] = intersection;  // save for later  // TODO: only save if number of slots is small enough?
     int num = collect(intersection, slot);
     countAcc.incrementCount(slot, num); // TODO: roll this into collect()
+  }
+
+  private Query buildRangeQuery(Range range) {
+    return sf.getType().getRangeQuery(null, sf, range.low == null ? null : calc.formatValue(range.low), range.high==null ? null : calc.formatValue(range.high), range.includeLower, range.includeUpper);
   }
 
   private void doSubs(SimpleOrderedMap bucket, int slot) throws IOException {

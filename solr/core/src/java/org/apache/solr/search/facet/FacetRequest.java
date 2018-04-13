@@ -783,6 +783,7 @@ class FacetRangeParser extends FacetParser<FacetRange> {
     facet.gap = m.get("gap");
     facet.hardend = getBoolean(m, "hardend", facet.hardend);
     facet.mincount = getLong(m, "mincount", 0);
+    facet.method = getString(m, "method", null);
 
     // TODO: refactor list-of-options code
 
