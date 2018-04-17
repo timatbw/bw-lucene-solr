@@ -24,10 +24,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.lucene.index.DocValues;
 import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.queries.function.FunctionValues;
-import org.apache.lucene.queries.function.ValueSource;
+import org.apache.lucene.index.NumericDocValues;
 import org.apache.lucene.search.Query;
+import org.apache.lucene.search.SimpleCollector;
+import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.NumericUtils;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.params.FacetParams;
@@ -38,6 +40,8 @@ import org.apache.solr.schema.SchemaField;
 import org.apache.solr.schema.TrieDateField;
 import org.apache.solr.schema.TrieField;
 import org.apache.solr.search.DocSet;
+import org.apache.solr.search.DocSetBuilder;
+import org.apache.solr.search.DocSetUtil;
 import org.apache.solr.util.DateMathParser;
 
 public class FacetRange extends FacetRequestSorted {
@@ -115,6 +119,26 @@ class FacetRangeProcessor extends FacetProcessor<FacetRange> {
       this.high = high;
       this.includeLower = includeLower;
       this.includeUpper = includeUpper;
+    }
+
+    public boolean contains(Comparable val) {
+      if (low != null) {
+        if (includeLower && val.compareTo(low) < 0) {
+          return false;
+        } else if (!includeLower && val.compareTo(low) <= 0) {
+          return false;
+        }
+      }
+
+      if (high != null) {
+        if (includeUpper && val.compareTo(high) > 0) {
+          return false;
+        } else if (!includeUpper && val.compareTo(high) >= 0) {
+          return false;
+        }
+      }
+
+      return true;
     }
   }
 
@@ -302,11 +326,22 @@ class FacetRangeProcessor extends FacetProcessor<FacetRange> {
 
     createAccs(fcontext.base.size(), slotCount);
 
+    FacetRangeMethod rangeMethod;
     if ("dvhash".equals(freq.method)) {
-      rangeStatsByDocValues();
+      rangeMethod = new FacetRangeByDocValues();
     } else {
-      rangeStatsByQuery();
+      rangeMethod = new FacetRangeByQuery();
     }
+
+    for (int idx = 0; idx<rangeList.size(); idx++) {
+      rangeMethod.processRange(rangeList.get(idx), idx);
+    }
+
+    for (int idx = 0; idx<otherList.size(); idx++) {
+      rangeMethod.processRange(otherList.get(idx), rangeList.size() + idx);
+    }
+
+    rangeMethod.finish();
 
     final SimpleOrderedMap res = new SimpleOrderedMap<>();
     List<SimpleOrderedMap> buckets = new ArrayList<>();
@@ -336,61 +371,6 @@ class FacetRangeProcessor extends FacetProcessor<FacetRange> {
 
   private Query[] filters;
   private DocSet[] intersections;
-
-  @Override
-  void collect(int segDoc, int slot) throws IOException {
-    if (slot != -1) {
-      super.collect(segDoc, slot);
-      return;
-    }
-  }
-
-  @Override
-  void setNextReader(LeafReaderContext ctx) throws IOException {
-//    super.setNextReader(ctx);
-    ValueSource valueSource = sf.getType().getValueSource(sf, null);
-    FunctionValues values = valueSource.getValues(fcontext.qcontext, ctx);
-
-
-  }
-
-  // Gathers the stats by making a single pass over the base DocSet, using
-  // the docValue for the field to sift into the appropriate Range buckets.
-  // Suitable when the gap leads to many interval buckets, especially if this is a
-  // subfacet inside a parent with many buckets of its own. However, this method
-  // can be slower if the base DocSet is big
-  private void rangeStatsByDocValues() throws IOException {
-
-    // TODO maintain map from Range objects to DocSet+slotNum buckets
-    // with quick lookup given a value to one of the Ranges
-
-    // collect fcontext.base using fcontext.searcher
-
-    // populate all filters and intersections
-
-    // call collect(DocSet, slot) on each of those
-  }
-
-  // Gathers the stats for each Range bucket by using a RangeQuery to run a search.
-  // Suitable when the number of buckets is fairly low, or the base DocSet is big
-  private void rangeStatsByQuery() throws IOException {
-    for (int idx = 0; idx<rangeList.size(); idx++) {
-      rangeStats(rangeList.get(idx), idx);
-    }
-
-    for (int idx = 0; idx<otherList.size(); idx++) {
-      rangeStats(otherList.get(idx), rangeList.size() + idx);
-    }
-  }
-
-  private void rangeStats(Range range, int slot) throws IOException {
-    filters[slot] = buildRangeQuery(range);
-    // TODO: specialize count only
-    DocSet intersection = fcontext.searcher.getDocSet(filters[slot], fcontext.base);
-    intersections[slot] = intersection;  // save for later  // TODO: only save if number of slots is small enough?
-    int num = collect(intersection, slot);
-    countAcc.incrementCount(slot, num); // TODO: roll this into collect()
-  }
 
   private Query buildRangeQuery(Range range) {
     return sf.getType().getRangeQuery(null, sf, range.low == null ? null : calc.formatValue(range.low), range.high==null ? null : calc.formatValue(range.high), range.includeLower, range.includeUpper);
@@ -423,8 +403,106 @@ class FacetRangeProcessor extends FacetProcessor<FacetRange> {
     return bucket;
   }
 
+  abstract class FacetRangeMethod {
+    void processRange(Range range, int slot) throws IOException {
+      filters[slot] = buildRangeQuery(range);
+      doOneRange(range, slot);
+    }
+    abstract void doOneRange(Range range, int slot) throws IOException;
+    abstract void finish() throws IOException;
+  }
 
+  // Gathers the stats for each Range bucket by using a RangeQuery to run a search.
+  // Suitable when the number of buckets is fairly low, or the base DocSet is big
+  class FacetRangeByQuery extends FacetRangeMethod {
 
+    @Override
+    void doOneRange(Range range, int slot) throws IOException {
+      // TODO: specialize count only
+      intersections[slot] = fcontext.searcher.getDocSet(filters[slot], fcontext.base);
+      int num = collect(intersections[slot], slot);
+      countAcc.incrementCount(slot, num); // TODO: roll this into collect()
+    }
+
+    @Override
+    void finish() throws IOException { }
+  }
+
+  // Gathers the stats by making a single pass over the base DocSet, using
+  // the docValue for the field to sift into the appropriate Range buckets.
+  // Suitable when the gap leads to many interval buckets, especially if this is a
+  // subfacet inside a parent with many buckets of its own. However, this method
+  // can be slower if the base DocSet is big
+  class FacetRangeByDocValues extends FacetRangeMethod {
+
+    private DocSetBuilder[] builders;
+
+    FacetRangeByDocValues() {
+      builders = new DocSetBuilder[intersections.length];
+    }
+
+    @Override
+    void doOneRange(Range range, int slot) throws IOException {
+      builders[slot] = new DocSetBuilder(fcontext.searcher.maxDoc(), fcontext.base.size() >> 2);
+    }
+
+    @Override
+    void finish() throws IOException {
+      DocSetUtil.collectSortedDocSet(fcontext.base, fcontext.searcher.getIndexReader(), new SimpleCollector() {
+            int docBase;
+            NumericDocValues values = null;
+            Bits docsWithField = null;
+
+            @Override
+            public boolean needsScores() {
+              return false;
+            }
+
+            @Override
+            protected void doSetNextReader(LeafReaderContext ctx) throws IOException {
+              docBase = ctx.docBase;
+              values = DocValues.getNumeric(ctx.reader(), sf.getName());
+              docsWithField = DocValues.getDocsWithField(ctx.reader(), sf.getName());
+            }
+
+            @Override
+            public void collect(int segDoc) throws IOException {
+              long val = values.get(segDoc);
+              if (val != 0 || docsWithField.get(segDoc)) {
+                placeDocId(val, docBase + segDoc);
+              }
+            }
+          }
+      );
+
+      for (int slot = 0; slot<builders.length; slot++) {
+        intersections[slot] = builders[slot].buildUniqueInOrder(null);
+        int num = collect(intersections[slot], slot);
+        countAcc.incrementCount(slot, num);
+      }
+    }
+
+    void placeDocId(long val, int docId) {
+      Comparable comparableVal = calc.bitsToValue(val);
+      int slot = 0;
+      // TODO binary search instead of linear search?
+      while (slot<rangeList.size()) {
+        if (rangeList.get(slot).contains(comparableVal)) {
+          builders[slot].add(docId);
+          break;
+        }
+        slot++;
+      }
+
+      slot = rangeList.size();
+      for (Range range : otherList) {
+        if (range.contains(comparableVal)) {
+          builders[slot].add(docId);
+        }
+        slot++;
+      }
+    }
+  }
 
   // Essentially copied from SimpleFacets...
   // would be nice to unify this stuff w/ analytics component...
