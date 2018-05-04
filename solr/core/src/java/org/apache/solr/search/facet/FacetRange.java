@@ -18,6 +18,7 @@ package org.apache.solr.search.facet;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -328,6 +329,10 @@ class FacetRangeProcessor extends FacetProcessor<FacetRange> {
 
     FacetRangeMethod rangeMethod;
     if ("dvhash".equals(freq.method)) {
+      if (!sf.hasDocValues() || sf.multiValued()) {
+        throw new SolrException(SolrException.ErrorCode.BAD_REQUEST,
+            "Facet range method " + freq.method + " only works for single valued numeric fields with docValues");
+      }
       rangeMethod = new FacetRangeByDocValues();
     } else {
       rangeMethod = new FacetRangeByQuery();
@@ -436,14 +441,19 @@ class FacetRangeProcessor extends FacetProcessor<FacetRange> {
   class FacetRangeByDocValues extends FacetRangeMethod {
 
     private DocSetBuilder[] builders;
+    private Comparable[] starts;
 
     FacetRangeByDocValues() {
       builders = new DocSetBuilder[intersections.length];
+      starts = new Comparable[rangeList.size()];
     }
 
     @Override
     void doOneRange(Range range, int slot) throws IOException {
       builders[slot] = new DocSetBuilder(fcontext.searcher.maxDoc(), fcontext.base.size() >> 2);
+      if (slot < starts.length) {
+        starts[slot] = range.low;
+      }
     }
 
     @Override
@@ -484,16 +494,26 @@ class FacetRangeProcessor extends FacetProcessor<FacetRange> {
 
     void placeDocId(long val, int docId) {
       Comparable comparableVal = calc.bitsToValue(val);
-      int slot = 0;
-      // TODO binary search instead of linear search?
-      while (slot<rangeList.size()) {
-        if (rangeList.get(slot).contains(comparableVal)) {
-          builders[slot].add(docId);
-          break;
+
+      int insertionPoint = Arrays.binarySearch(starts, comparableVal);
+
+      int slot;
+      if (insertionPoint >= 0) {
+        if (rangeList.get(insertionPoint).includeLower) {
+          slot = insertionPoint;
+        } else {
+          slot = insertionPoint - 1;
         }
-        slot++;
+      } else {
+        slot = -(insertionPoint + 2); // See docs for binarySearch return value
       }
 
+      if (slot >= 0 && slot < rangeList.size() &&
+          rangeList.get(slot).contains(comparableVal)) { // It could be out of range
+        builders[slot].add(docId);
+      }
+
+      // Also add to any relevant Ranges in the otherList
       slot = rangeList.size();
       for (Range range : otherList) {
         if (range.contains(comparableVal)) {
