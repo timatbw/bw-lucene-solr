@@ -696,6 +696,10 @@ class FacetRangeProcessor extends FacetProcessor<FacetRange> {
 
     public IntCalc(final SchemaField f) { super(f); }
     @Override
+    public Comparable bitsToValue(long bits) {
+      return (int)bits;
+    }
+    @Override
     protected Integer parseStr(String rawval) {
       return Integer.valueOf(rawval);
     }
