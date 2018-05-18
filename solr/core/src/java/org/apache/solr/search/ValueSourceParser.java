@@ -64,6 +64,7 @@ import org.apache.solr.search.facet.StddevAgg;
 import org.apache.solr.search.facet.SumAgg;
 import org.apache.solr.search.facet.SumsqAgg;
 import org.apache.solr.search.facet.RelatednessAgg;
+import org.apache.solr.search.facet.TopDocsAgg;
 import org.apache.solr.search.facet.UniqueAgg;
 import org.apache.solr.search.facet.UniqueBlockAgg;
 import org.apache.solr.search.facet.VarianceAgg;
@@ -1039,7 +1040,7 @@ public abstract class ValueSourceParser implements NamedListInitializedPlugin {
     });
 
     addParser("agg_percentile", new PercentileAgg.Parser());
-    
+
     addParser("agg_" + RelatednessAgg.NAME, new ValueSourceParser() {
       @Override
       public ValueSource parse(FunctionQParser fp) throws SyntaxError {
@@ -1053,6 +1054,8 @@ public abstract class ValueSourceParser implements NamedListInitializedPlugin {
       }
     });
     
+    addParser("agg_topdocs", new TopDocsAgg.Parser());
+
     addParser("childfield", new ChildFieldValueSourceParser());
   }
 
