@@ -391,6 +391,8 @@ abstract class FacetParser<FacetRequestT extends FacetRequest> {
       return parseQueryFacet(key, args);
     } else if ("range".equals(type)) {
       return parseRangeFacet(key, args);
+    } else if ("topdocs".equals(type)) {
+      return TopDocsAgg.AggParser.parse(args);
     }
 
     AggValueSource stat = parseStat(key, type, args);

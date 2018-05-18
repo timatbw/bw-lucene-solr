@@ -1,0 +1,311 @@
+package org.apache.solr.search.facet;
+
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import java.io.IOException;
+import java.util.List;
+import java.util.Map;
+import java.util.function.IntFunction;
+
+import org.apache.lucene.index.LeafReaderContext;
+import org.apache.lucene.queries.function.ValueSource;
+import org.apache.lucene.search.BooleanClause;
+import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.Query;
+import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.Sort;
+import org.apache.lucene.search.TopDocs;
+import org.apache.solr.common.SolrException;
+import org.apache.solr.handler.component.ResponseBuilder;
+import org.apache.solr.request.SolrRequestInfo;
+import org.apache.solr.response.BasicResultContext;
+import org.apache.solr.response.ResultContext;
+import org.apache.solr.search.DocList;
+import org.apache.solr.search.DocSet;
+import org.apache.solr.search.DocSlice;
+import org.apache.solr.search.FunctionQParser;
+import org.apache.solr.search.QParser;
+import org.apache.solr.search.QueryUtils;
+import org.apache.solr.search.ReturnFields;
+import org.apache.solr.search.SolrReturnFields;
+import org.apache.solr.search.SortSpec;
+import org.apache.solr.search.SortSpecParsing;
+import org.apache.solr.search.SyntaxError;
+import org.apache.solr.search.ValueSourceParser;
+
+
+public class TopDocsAgg extends AggValueSource {
+  Object qArg;
+  int limit;
+  Object sortArg;
+  Object fieldsArg;
+
+  public TopDocsAgg(Object q, int offset, int limit, Object sort, Object fields) {
+    super("topdocs");
+    this.qArg = q;
+    this.limit = limit;
+    this.sortArg = sort;
+    this.fieldsArg = fields;
+  }
+
+
+  public static class Parser extends ValueSourceParser {
+    @Override
+    public ValueSource parse(FunctionQParser fp) throws SyntaxError {
+      Object qArg = null;
+      int offset = 0;
+      int limit = 1;  // by default, just the top matching doc
+      Object sortArg = null;
+      Object fieldsArg = null;
+
+      if (fp.hasMoreArguments()) {
+//        qArg = fp.parseNestedQuery();  // TODO: allow lucene query in string arg?  topdocs("text:foo")?
+        qArg = fp.parseArg();
+      }
+      if (fp.hasMoreArguments()) {
+        offset = fp.parseInt();
+      }
+      if (fp.hasMoreArguments()) {
+        limit = fp.parseInt();
+      }
+      if (fp.hasMoreArguments()) {
+        sortArg = fp.parseArg();
+      }
+      if (fp.hasMoreArguments()) {
+        fieldsArg = fp.parseArg();
+      }
+
+      return new TopDocsAgg(qArg, offset, limit, sortArg, fieldsArg);
+    }
+  }
+
+  // TODO: make base class for parsers of Aggs
+  public static class AggParser {
+    public static AggValueSource parse(Object arg) {
+      Object qArg = null;
+      int offset = 0;
+      int limit = 1;  // by default, just the top matching doc
+      Object sortArg = null;
+      Object fieldsArg = null;
+
+      if (arg != null) {
+        if (arg instanceof String) {
+          qArg = (String)arg;
+        } else if (arg instanceof Map) {
+          Map<String,Object> map = (Map<String,Object>)arg;
+          for (Map.Entry<String,Object> entry : map.entrySet()) {
+            String key = entry.getKey();
+            Object val = entry.getValue();
+            // match the params of the JSON Request API for a query
+            // "filter" isn't needed since we're starting with a domain that has already been filtered
+            if ("query".equals(key)) {
+              qArg = val;
+            } else if ("offset".equals(key)) {
+              offset = ((Number)val).intValue();
+            } else if ("limit".equals(key)) {
+              limit = ((Number)val).intValue();
+            } else if ("sort".equals(key)) {
+              sortArg = val;  // TODO: handle array of strings, array of maps?
+            } else if ("fields".equals(key)) {
+              fieldsArg = val;
+            } else if ("type".equals(key)) {
+              // OK
+            } else {
+              throw new SolrException(SolrException.ErrorCode.BAD_REQUEST, "Unknown key '" + key + "' in topdocs aggregation: " + arg);
+            }
+          }
+        }
+      }
+
+      return new TopDocsAgg(qArg, offset, limit, sortArg, fieldsArg);
+    }
+  }
+
+
+
+  @Override
+  public SlotAcc createSlotAcc(FacetContext fcontext, int numDocs, int numSlots) throws IOException {
+    ResponseBuilder rb = SolrRequestInfo.getRequestInfo().getResponseBuilder();
+
+    Query query = null;
+    Sort sort = null;
+    ReturnFields returnFields = null;
+
+    if (qArg == null) {
+      // use main query if query is not specified
+      query = rb.getQuery();
+    } else if (qArg instanceof String) {
+      try {
+        QParser qparser = QParser.getParser((String)qArg, null, fcontext.req);
+        query = qparser.getQuery();
+      } catch (SyntaxError syntaxError) {
+        throw new SolrException(SolrException.ErrorCode.BAD_REQUEST, syntaxError);
+      }
+    } else if (qArg instanceof Query) {
+      query = (Query)qArg;
+    } else {
+      // TODO - JSON
+    }
+
+    if (sortArg == null) {
+      sort = rb.getSortSpec().getSort();
+    } else if (sortArg instanceof Sort) {
+      sort = (Sort)sortArg;
+    } else if (sortArg instanceof String) {
+      SortSpec ss = SortSpecParsing.parseSortSpec((String)sortArg, fcontext.req);
+      sort = ss.getSort();
+    } else {
+      // TODO - JSON
+    }
+
+    if (fieldsArg == null) {
+      returnFields = rb.rsp.getReturnFields();
+    } else if (fieldsArg instanceof String) {
+      returnFields = new SolrReturnFields((String)fieldsArg, fcontext.req);
+    } else {
+      String[] fl = null;
+      if (fieldsArg instanceof List) {
+        List lst = (List)fieldsArg;
+        fl = (String[])lst.toArray(new String[lst.size()]);
+      } else {
+        fl = (String[])fieldsArg;
+      }
+      returnFields = new SolrReturnFields(fl, fcontext.req);
+    }
+
+    // This method won't work with post-filters that actually change the score, or change which documents match.
+    // That may be desirable though.
+
+    Sort sort2 = fcontext.searcher.weightSort(sort);
+    Query query2 = QueryUtils.makeQueryable(query);
+    // rewrite once so we won't do it per-bucket
+    query2 = query2.rewrite(fcontext.searcher.getIndexReader());
+
+    // todo: only create weight once?
+
+    return new Acc(fcontext, query2, sort2, returnFields);
+  }
+
+  @Override
+  public FacetMerger createFacetMerger(Object prototype) {
+    System.out.println("############ " + prototype); // nocommit
+    return new Merger();
+  }
+
+  @Override
+  public int hashCode() {
+    // TODO: be careful if/how this is cached... queries can depend on the context (param substitution, NOW, etc)
+    int h = qArg == null ? 29 : qArg.hashCode();
+    h = h * 31 + limit;
+    h = h * 31 + (sortArg == null ? 29 : sortArg.hashCode());
+    return h;
+  }
+
+  @Override
+  public String description() {
+    return "topdocs"; // TODO
+  }
+
+
+  private class Acc extends SlotAcc {
+    Query query;
+    Sort sort;
+    boolean doScores = true;
+    ResultContext result;
+    ReturnFields returnFields;
+
+    Acc(FacetContext fcontext, Query query, Sort sort, ReturnFields returnFields) {
+      super(fcontext);
+      this.query = query;
+      this.sort = sort;
+      this.returnFields = returnFields;
+    }
+
+    @Override
+    public int collect(DocSet docs, int slot, IntFunction<SlotContext> slotContext) throws IOException {
+      BooleanQuery.Builder builder = new BooleanQuery.Builder();
+      builder.add(query, BooleanClause.Occur.MUST);
+      builder.add(docs.getTopFilter(), BooleanClause.Occur.FILTER);
+      Query finalQuery = builder.build();
+
+      if (sort == null) sort = Sort.RELEVANCE;
+
+      int offset = 0;
+      TopDocs topDocs = fcontext.searcher.search(finalQuery, limit, sort);
+
+      long totalHits = topDocs.totalHits;
+      int nDocsReturned = topDocs.scoreDocs.length;
+      float maxScore = totalHits>0 ? topDocs.getMaxScore() : 0.0f;
+      int[] ids = new int[nDocsReturned];
+      float scores[] = doScores ? new float[nDocsReturned] : null;
+      for (int i=0; i<nDocsReturned; i++) {
+        ScoreDoc scoreDoc = topDocs.scoreDocs[i];
+        ids[i] = scoreDoc.doc;
+        if (scores != null) scores[i] = scoreDoc.score;
+      }
+      DocList docList = new DocSlice(offset, ids.length, ids, scores, totalHits, maxScore);
+
+      this.result = new BasicResultContext(docList, returnFields , fcontext.searcher, query, fcontext.req);
+
+      return (int)topDocs.totalHits;
+    }
+
+    @Override
+    public void setNextReader(LeafReaderContext readerContext) throws IOException {
+    }
+
+    @Override
+    public void collect(int doc, int slot) throws IOException {
+    }
+
+    @Override
+    public int compare(int slotA, int slotB) {
+      return slotA - slotB;
+    }
+
+    @Override
+    public Object getValue(int slotNum) throws IOException {
+      return result;
+    }
+
+    @Override
+    public void reset() {
+
+    }
+
+    @Override
+    public void resize(Resizer resizer) {
+    }
+  }
+
+
+
+  public static class Merger extends FacetDoubleMerger {
+    double val;
+
+    @Override
+    public void merge(Object facetResult, Context mcontext) {
+      val += ((Number)facetResult).doubleValue();
+    }
+
+    protected double getDouble() {
+      return val;
+    }
+  }
+}
+
