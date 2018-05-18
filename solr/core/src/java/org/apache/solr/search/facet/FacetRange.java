@@ -46,6 +46,26 @@ import org.apache.solr.search.DocSetUtil;
 import org.apache.solr.util.DateMathParser;
 
 public class FacetRange extends FacetRequestSorted {
+
+  public enum FacetMethod {
+    DV,  // Does a single pass using DocValues to sift into buckets
+    ENUM, // Uses a RangeQuery for each bucket
+    ;
+
+    public static FacetRange.FacetMethod fromString(String method) {
+      if (method == null || method.length() == 0) return ENUM;
+      switch (method) {
+        case "dv":
+          return DV;
+        case "enum":
+          return ENUM;
+        default:
+          throw new SolrException(SolrException.ErrorCode.BAD_REQUEST, "Unknown FacetRange method " + method);
+      }
+    }
+  }
+
+
   String field;
   Object start;
   Object end;
@@ -53,7 +73,7 @@ public class FacetRange extends FacetRequestSorted {
   boolean hardend = false;
   EnumSet<FacetParams.FacetRangeInclude> include;
   EnumSet<FacetParams.FacetRangeOther> others;
-  String method; // TODO enum
+  FacetMethod method;
 
   {
     // defaults
@@ -328,7 +348,7 @@ class FacetRangeProcessor extends FacetProcessor<FacetRange> {
     createAccs(fcontext.base.size(), slotCount);
 
     FacetRangeMethod rangeMethod;
-    if ("dvhash".equals(freq.method)) {
+    if (freq.method == FacetRange.FacetMethod.DV) {
       if (!sf.hasDocValues() || sf.multiValued()) {
         throw new SolrException(SolrException.ErrorCode.BAD_REQUEST,
             "Facet range method " + freq.method + " only works for single valued numeric fields with docValues");
