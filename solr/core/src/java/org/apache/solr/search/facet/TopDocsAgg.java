@@ -18,6 +18,9 @@ package org.apache.solr.search.facet;
  */
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.function.IntFunction;
@@ -29,9 +32,13 @@ import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.Sort;
+import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.TopDocs;
+import org.apache.solr.common.SolrDocument;
+import org.apache.solr.common.SolrDocumentList;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.handler.component.ResponseBuilder;
+import org.apache.solr.request.SolrQueryRequest;
 import org.apache.solr.request.SolrRequestInfo;
 import org.apache.solr.response.BasicResultContext;
 import org.apache.solr.response.ResultContext;
@@ -61,6 +68,7 @@ public class TopDocsAgg extends AggValueSource {
     this.limit = limit;
     this.sortArg = sort;
     this.fieldsArg = fields;
+    // TODO store and use offset, or drop offset support for this use-case?
   }
 
 
@@ -143,7 +151,6 @@ public class TopDocsAgg extends AggValueSource {
     ResponseBuilder rb = SolrRequestInfo.getRequestInfo().getResponseBuilder();
 
     Query query = null;
-    Sort sort = null;
     ReturnFields returnFields = null;
 
     if (qArg == null) {
@@ -162,18 +169,11 @@ public class TopDocsAgg extends AggValueSource {
       // TODO - JSON
     }
 
-    if (sortArg == null) {
-      sort = rb.getSortSpec().getSort();
-    } else if (sortArg instanceof Sort) {
-      sort = (Sort)sortArg;
-    } else if (sortArg instanceof String) {
-      SortSpec ss = SortSpecParsing.parseSortSpec((String)sortArg, fcontext.req);
-      sort = ss.getSort();
-    } else {
-      // TODO - JSON
-    }
+    Sort sort = buildSort(fcontext.req, rb);
 
-    if (fieldsArg == null) {
+    if (fieldsArg == null && fcontext.isShard()) { // shard requests normally only ask for fl=id,score
+      returnFields = new SolrReturnFields();
+    } else if (fieldsArg == null) {
       returnFields = rb.rsp.getReturnFields();
     } else if (fieldsArg instanceof String) {
       returnFields = new SolrReturnFields((String)fieldsArg, fcontext.req);
@@ -186,6 +186,16 @@ public class TopDocsAgg extends AggValueSource {
         fl = (String[])fieldsArg;
       }
       returnFields = new SolrReturnFields(fl, fcontext.req);
+    }
+
+    // Validate sort fields are in return fields
+    if (sort != null && !returnFields.wantsAllFields()) {
+      for (SortField sortField : sort.getSort()) {
+        if (!returnFields.wantsField(sortField.getField())) {
+          throw new SolrException(SolrException.ErrorCode.BAD_REQUEST,
+              "topdocs sort field must be in returned field list - cannot sort by " + sortField.getField());
+        }
+      }
     }
 
     // This method won't work with post-filters that actually change the score, or change which documents match.
@@ -201,9 +211,22 @@ public class TopDocsAgg extends AggValueSource {
     return new Acc(fcontext, query2, sort2, returnFields);
   }
 
+  private Sort buildSort(SolrQueryRequest req, ResponseBuilder rb) {
+    if (sortArg == null) {
+      return rb.getSortSpec().getSort();
+    } else if (sortArg instanceof Sort) {
+      return (Sort)sortArg;
+    } else if (sortArg instanceof String) {
+      SortSpec ss = SortSpecParsing.parseSortSpec((String)sortArg, req);
+      return ss.getSort();
+    } else {
+      // TODO - JSON
+      return null;
+    }
+  }
+
   @Override
   public FacetMerger createFacetMerger(Object prototype) {
-    System.out.println("############ " + prototype); // nocommit
     return new Merger();
   }
 
@@ -295,16 +318,61 @@ public class TopDocsAgg extends AggValueSource {
 
 
 
-  public static class Merger extends FacetDoubleMerger {
-    double val;
+  public class Merger extends FacetMerger {
+    SolrDocumentList result = new SolrDocumentList();
+    List<SolrDocument> combinedDocs = new ArrayList<>(); // TODO use a priority queue
 
     @Override
     public void merge(Object facetResult, Context mcontext) {
-      val += ((Number)facetResult).doubleValue();
+      SolrDocumentList shardTopDocs = (SolrDocumentList)facetResult;
+      result.setNumFound(result.getNumFound() + shardTopDocs.getNumFound());
+
+      if (shardTopDocs.getMaxScore() != null) {
+        result.setMaxScore(result.getMaxScore()==null ?
+            shardTopDocs.getMaxScore()
+            : Math.max(result.getMaxScore(), shardTopDocs.getMaxScore()));
+      }
+
+      combinedDocs.addAll(shardTopDocs);
     }
 
-    protected double getDouble() {
-      return val;
+    @Override
+    public void finish(Context mcontext) {
+      // unused
+    }
+
+    @Override
+    public Object getMergedResult() {
+
+      SolrRequestInfo requestInfo = SolrRequestInfo.getRequestInfo();
+      Sort sort = buildSort(requestInfo.getReq(), requestInfo.getResponseBuilder());
+      if (sort != null) {
+        SortField[] sortFields = sort.getSort();
+        Comparator<Comparable> fieldComparator = Comparator.<Comparable>nullsLast(Comparator.<Comparable>naturalOrder());
+
+        Comparator<SolrDocument> docComparator = new Comparator<SolrDocument>() {
+          @Override
+          public int compare(SolrDocument doc1, SolrDocument doc2) {
+            for (int i = 0; i<sortFields.length; i++) {
+              int comparisonValue = fieldComparator.compare(
+                  (Comparable)doc1.get(sortFields[i].getField()),
+                  (Comparable)doc2.get(sortFields[i].getField())
+              );
+              if (comparisonValue != 0) {
+                int directionFactor = sortFields[i].getReverse() ? -1 : 1;
+                return directionFactor * comparisonValue;
+              }
+            }
+            return 0;
+          }
+        };
+
+        Collections.sort(combinedDocs, docComparator);
+      }
+
+      result.addAll(combinedDocs.size() > limit ? combinedDocs.subList(0, limit) : combinedDocs);
+
+      return result;
     }
   }
 }
