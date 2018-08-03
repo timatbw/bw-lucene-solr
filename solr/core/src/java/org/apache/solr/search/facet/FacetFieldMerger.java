@@ -103,42 +103,7 @@ public class FacetFieldMerger extends FacetRequestSortedMerger<FacetField> {
 
     sortBuckets();
 
-    long first = freq.offset;
-    long end = freq.limit >=0 ? first + (int) freq.limit : Integer.MAX_VALUE;
-    long last = Math.min(sortedBuckets.size(), end);
-
-    List<SimpleOrderedMap> resultBuckets = new ArrayList<>(Math.max(0, (int)(last - first)));
-
-    /** this only works if there are no filters (like mincount)
-    for (int i=first; i<last; i++) {
-      FacetBucket bucket = sortedBuckets.get(i);
-      resultBuckets.add( bucket.getMergedBucket() );
-    }
-    ***/
-
-    // TODO: change effective offsets + limits at shards...
-
-    int off = (int)freq.offset;
-    int lim = freq.limit >= 0 ? (int)freq.limit : Integer.MAX_VALUE;
-    for (FacetBucket bucket : sortedBuckets) {
-      if (bucket.getCount() < freq.mincount) {
-        continue;
-      }
-
-      if (off > 0) {
-        --off;
-        continue;
-      }
-
-      if (resultBuckets.size() >= lim) {
-        break;
-      }
-
-      resultBuckets.add( bucket.getMergedBucket() );
-    }
-
-
-    result.add("buckets", resultBuckets);
+    result.add("buckets", getPaginatedBuckets());
     if (missingBucket != null) {
       result.add("missing", missingBucket.getMergedBucket());
     }
