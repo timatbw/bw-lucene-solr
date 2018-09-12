@@ -260,7 +260,7 @@ public class TopDocsAgg extends AggValueSource {
     }
 
     @Override
-    public int collect(DocSet docs, int slot, IntFunction<SlotContext> slotContext) throws IOException {
+    public int collect(DocSet docs, int slot) throws IOException {
       BooleanQuery.Builder builder = new BooleanQuery.Builder();
       builder.add(query, BooleanClause.Occur.MUST);
       builder.add(docs.getTopFilter(), BooleanClause.Occur.FILTER);
