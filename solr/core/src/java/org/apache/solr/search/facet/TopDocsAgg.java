@@ -19,13 +19,13 @@ package org.apache.solr.search.facet;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.function.IntFunction;
 
-import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.queries.function.ValueSource;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
@@ -82,7 +82,6 @@ public class TopDocsAgg extends AggValueSource {
       Object fieldsArg = null;
 
       if (fp.hasMoreArguments()) {
-//        qArg = fp.parseNestedQuery();  // TODO: allow lucene query in string arg?  topdocs("text:foo")?
         qArg = fp.parseArg();
       }
       if (fp.hasMoreArguments()) {
@@ -208,7 +207,7 @@ public class TopDocsAgg extends AggValueSource {
 
     // todo: only create weight once?
 
-    return new Acc(fcontext, query2, sort2, returnFields);
+    return new Acc(fcontext, query2, sort2, returnFields, numSlots);
   }
 
   private Sort buildSort(SolrQueryRequest req, ResponseBuilder rb) {
@@ -249,21 +248,35 @@ public class TopDocsAgg extends AggValueSource {
     Query query;
     Sort sort;
     boolean doScores = true;
-    ResultContext result;
     ReturnFields returnFields;
+    ResultContext[] result;
 
-    Acc(FacetContext fcontext, Query query, Sort sort, ReturnFields returnFields) {
+    Acc(FacetContext fcontext, Query query, Sort sort, ReturnFields returnFields, int numSlots) {
       super(fcontext);
       this.query = query;
       this.sort = sort;
       this.returnFields = returnFields;
+      this.result = new ResultContext[numSlots];
+    }
+
+    @Override
+    public void collect(int doc, int slot, IntFunction<SlotContext> slotContext) throws IOException {
+      // We don't really care about individual docs, we're just going to build the whole result (once)
+      if (result[slot] == null) {
+        buildResultForSlot(slotContext.apply(slot).getSlotQuery(), slot);
+      }
     }
 
     @Override
     public int collect(DocSet docs, int slot, IntFunction<SlotContext> slotContext) throws IOException {
+      assert null == result[slot];
+      return buildResultForSlot(docs.getTopFilter(), slot);
+    }
+
+    private int buildResultForSlot(Query slotQuery, int slot) throws IOException {
       BooleanQuery.Builder builder = new BooleanQuery.Builder();
       builder.add(query, BooleanClause.Occur.MUST);
-      builder.add(docs.getTopFilter(), BooleanClause.Occur.FILTER);
+      builder.add(slotQuery, BooleanClause.Occur.FILTER);
       Query finalQuery = builder.build();
 
       if (sort == null) sort = Sort.RELEVANCE;
@@ -283,17 +296,9 @@ public class TopDocsAgg extends AggValueSource {
       }
       DocList docList = new DocSlice(offset, ids.length, ids, scores, totalHits, maxScore);
 
-      this.result = new BasicResultContext(docList, returnFields , fcontext.searcher, query, fcontext.req);
+      result[slot] = new BasicResultContext(docList, returnFields , fcontext.searcher, query, fcontext.req);
 
       return (int)topDocs.totalHits;
-    }
-
-    @Override
-    public void setNextReader(LeafReaderContext readerContext) throws IOException {
-    }
-
-    @Override
-    public void collect(int doc, int slot) throws IOException {
     }
 
     @Override
@@ -302,17 +307,18 @@ public class TopDocsAgg extends AggValueSource {
     }
 
     @Override
-    public Object getValue(int slotNum) throws IOException {
-      return result;
+    public Object getValue(int slotNum) {
+      return result[slotNum];
     }
 
     @Override
     public void reset() {
-
+      Arrays.fill(result, null);
     }
 
     @Override
     public void resize(Resizer resizer) {
+      result = resizer.resize(result, null);
     }
   }
 
