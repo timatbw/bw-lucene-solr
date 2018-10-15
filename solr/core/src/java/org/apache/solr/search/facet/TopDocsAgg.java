@@ -277,6 +277,7 @@ public class TopDocsAgg extends AggValueSource {
       BooleanQuery.Builder builder = new BooleanQuery.Builder();
       builder.add(query, BooleanClause.Occur.MUST);
       builder.add(slotQuery, BooleanClause.Occur.FILTER);
+      builder.add(fcontext.base.getTopFilter(), BooleanClause.Occur.FILTER);
       Query finalQuery = builder.build();
 
       if (sort == null) sort = Sort.RELEVANCE;
