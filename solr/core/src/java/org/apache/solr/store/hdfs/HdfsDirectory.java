@@ -42,8 +42,8 @@ import org.slf4j.LoggerFactory;
 
 public class HdfsDirectory extends BaseDirectory {
   private static final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
-  public static final int DEFAULT_BUFFER_SIZE = 4096;
-  
+  public static final int DEFAULT_BUFFER_SIZE = Integer.getInteger("solr.hdfs.buffer.size", 4096);
+
   private static final String LF_EXT = ".lf";
   protected final Path hdfsDirPath;
   protected final Configuration configuration;
