@@ -147,14 +147,19 @@ public class PercentileAgg extends SimpleAggValueSource {
     public Object getValue(int slotNum) throws IOException {
       if (fcontext.isShard()) {
         return getShardValue(slotNum);
+      } else {
+        return getSortableValue(slotNum);
       }
+    }
+
+    @Override
+    public Object getSortableValue(int slotNum) {
       if (sortvals != null && percentiles.size()==1) {
         // we've already calculated everything we need
         return digests[slotNum] != null ? sortvals[slotNum] : null;
       }
       return getValueFromDigest( digests[slotNum] );
     }
-
 
     public Object getShardValue(int slot) throws IOException {
       AVLTreeDigest digest = digests[slot];

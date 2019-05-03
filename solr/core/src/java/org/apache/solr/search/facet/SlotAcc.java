@@ -141,6 +141,13 @@ public abstract class SlotAcc implements Closeable {
 
   public abstract Object getValue(int slotNum) throws IOException;
 
+  /** Returns a value that can be used for sorting, because getValue
+   * may return an intermediate structure when called in an isShard context
+   */
+  public Object getSortableValue(int slotNum) throws IOException {
+    return getValue(slotNum);
+  }
+
   public void setValues(SimpleOrderedMap<Object> bucket, int slotNum) throws IOException {
     if (key == null) return;
     Object val = getValue(slotNum);
@@ -472,6 +479,11 @@ class AvgSlotAcc extends DoubleFuncSlotAcc {
   }
 
   @Override
+  public Object getSortableValue(int slot) {
+    return avg(slot);
+  }
+
+  @Override
   public void resize(Resizer resizer) {
     super.resize(resizer);
     counts = resizer.resize(counts, 0);
@@ -527,6 +539,11 @@ class VarianceSlotAcc extends DoubleFuncSlotAcc {
     } else {
       return this.variance(slot);
     }
+  }
+
+  @Override
+  public Object getSortableValue(int slot) {
+    return this.variance(slot);
   }
 
   @Override
@@ -589,6 +606,11 @@ class StddevSlotAcc extends DoubleFuncSlotAcc {
     } else {
       return this.stdDev(slot);
     }
+  }
+
+  @Override
+  public Object getSortableValue(int slot) {
+    return this.stdDev(slot);
   }
 
   @Override

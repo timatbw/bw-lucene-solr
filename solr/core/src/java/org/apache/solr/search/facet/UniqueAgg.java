@@ -175,6 +175,11 @@ public class UniqueAgg extends StrAggValueSource {
       return getCardinality(slot);
     }
 
+    @Override
+    public Object getSortableValue(int slot) {
+      return getCardinality(slot);
+    }
+
     private int getCardinality(int slot) {
       LongSet set = sets[slot];
       return set==null ? 0 : set.cardinality();

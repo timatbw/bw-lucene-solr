@@ -57,8 +57,10 @@ import org.apache.solr.schema.TextField;
 import org.apache.solr.search.facet.AggValueSource;
 import org.apache.solr.search.facet.AvgAgg;
 import org.apache.solr.search.facet.CountAgg;
+import org.apache.solr.search.facet.DivAgg;
 import org.apache.solr.search.facet.HLLAgg;
 import org.apache.solr.search.facet.MinMaxAgg;
+import org.apache.solr.search.facet.MulAgg;
 import org.apache.solr.search.facet.PercentileAgg;
 import org.apache.solr.search.facet.StddevAgg;
 import org.apache.solr.search.facet.SumAgg;
@@ -1053,6 +1055,20 @@ public abstract class ValueSourceParser implements NamedListInitializedPlugin {
     });
     
     addParser("agg_topdocs", new TopDocsAgg.Parser());
+
+    addParser("agg_mul", new ValueSourceParser() {
+      @Override
+      public ValueSource parse(FunctionQParser fp) throws SyntaxError {
+        return new MulAgg(fp.parseAggValueSourceList());
+      }
+    });
+
+    addParser("agg_div", new ValueSourceParser() {
+      @Override
+      public ValueSource parse(FunctionQParser fp) throws SyntaxError {
+        return new DivAgg(fp.parseAggValueSourceList());
+      }
+    });
 
     addParser("childfield", new ChildFieldValueSourceParser());
   }

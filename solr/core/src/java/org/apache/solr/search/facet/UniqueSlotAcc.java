@@ -55,7 +55,13 @@ abstract class UniqueSlotAcc extends SlotAcc {
   public Object getValue(int slot) throws IOException {
     if (fcontext.isShard()) {
       return getShardValue(slot);
+    } else {
+      return getSortableValue(slot);
     }
+  }
+
+  @Override
+  public Object getSortableValue(int slot) {
     if (counts != null) {  // will only be pre-populated if this was used for sorting.
       return counts[slot];
     }

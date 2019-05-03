@@ -438,6 +438,14 @@ public class FunctionQParser extends QParser {
     return vs;
   }
 
+  public List<AggValueSource> parseAggValueSourceList() throws SyntaxError {
+    List<AggValueSource> sources = new ArrayList<>(3);
+    while (hasMoreArguments()) {
+      sources.add(parseAgg(FLAG_DEFAULT | FLAG_CONSUME_DELIMITER));
+    }
+    return sources;
+  }
+
 
   /**
    * Consume an argument delimiter (a comma) from the token stream.

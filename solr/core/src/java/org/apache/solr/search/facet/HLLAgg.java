@@ -170,6 +170,11 @@ public class HLLAgg extends StrAggValueSource {
       return getCardinality(slot);
     }
 
+    @Override
+    public Object getSortableValue(int slot) {
+      return getCardinality(slot);
+    }
+
     private int getCardinality(int slot) {
       HLL set = sets[slot];
       return set==null ? 0 : (int)set.cardinality();
