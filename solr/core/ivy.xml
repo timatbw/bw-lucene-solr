@@ -72,6 +72,7 @@
       here as such so that they are included in the runtime distribution.
      -->
     <dependency org="org.apache.hadoop" name="hadoop-hdfs" rev="${/org.apache.hadoop/hadoop-hdfs}" conf="compile.hadoop"/>
+    <dependency org="org.apache.hadoop" name="hadoop-hdfs-client" rev="${/org.apache.hadoop/hadoop-hdfs-client}" conf="compile.hadoop"/>
     <dependency org="org.apache.hadoop" name="hadoop-annotations" rev="${/org.apache.hadoop/hadoop-annotations}" conf="compile.hadoop"/>
     <dependency org="org.apache.hadoop" name="hadoop-auth" rev="${/org.apache.hadoop/hadoop-auth}" conf="compile.hadoop"/>
     <dependency org="commons-configuration" name="commons-configuration" rev="${/commons-configuration/commons-configuration}" conf="compile.hadoop"/>
@@ -79,7 +80,7 @@
     
     <dependency org="com.google.protobuf" name="protobuf-java" rev="${/com.google.protobuf/protobuf-java}" conf="compile.hadoop"/>
     <dependency org="com.github.ben-manes.caffeine" name="caffeine" rev="${/com.github.ben-manes.caffeine/caffeine}" conf="compile.hadoop"/>
-    <dependency org="org.apache.htrace" name="htrace-core" rev="${/org.apache.htrace/htrace-core}" conf="compile.hadoop"/>
+    <dependency org="org.apache.htrace" name="htrace-core4" rev="${/org.apache.htrace/htrace-core4}" conf="compile.hadoop"/>
     
     <!-- Hadoop DfsMiniCluster Dependencies-->
     <dependency org="org.apache.hadoop" name="hadoop-common" rev="${/org.apache.hadoop/hadoop-common}" conf="test.DfsMiniCluster">
@@ -96,7 +97,7 @@
     <dependency org="com.sun.jersey" name="jersey-server" rev="${/com.sun.jersey/jersey-server}" conf="test.DfsMiniCluster"/>
     <dependency org="commons-collections" name="commons-collections" rev="${/commons-collections/commons-collections}" conf="test.DfsMiniCluster"/>
     <dependency org="io.netty" name="netty-all" rev="${/io.netty/netty-all}" conf="test.DfsMiniCluster"/>
-    <dependency org="org.apache.htrace" name="htrace-core" rev="${/org.apache.htrace/htrace-core}" conf="test.DfsMiniCluster"/>
+    <dependency org="org.apache.htrace" name="htrace-core4" rev="${/org.apache.htrace/htrace-core4}" conf="test.DfsMiniCluster"/>
     <dependency org="org.codehaus.jackson" name="jackson-core-asl" rev="${/org.codehaus.jackson/jackson-core-asl}" conf="compile" />
     <dependency org="org.codehaus.jackson" name="jackson-mapper-asl" rev="${/org.codehaus.jackson/jackson-mapper-asl}" conf="compile" />
  
