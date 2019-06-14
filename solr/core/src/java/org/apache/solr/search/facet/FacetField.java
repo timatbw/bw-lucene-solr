@@ -91,6 +91,7 @@ public class FacetField extends FacetRequestSorted {
     DV,  // DocValues, collect into ordinal array
     UIF, // UnInvertedField, collect into ordinal array
     DVHASH, // DocValues, collect into hash
+    DVSTRING, // DocValues, collect into hash, for non-numeric single or multi-valued fields
     ENUM, // TermsEnum then intersect DocSet (stream-able)
     STREAM, // presently equivalent to ENUM
     SMART,
@@ -102,6 +103,7 @@ public class FacetField extends FacetRequestSorted {
         case "dv": return DV;
         case "uif": return UIF;
         case "dvhash": return DVHASH;
+        case "dvstring": return DVSTRING;
         case "enum": return ENUM;
         case "stream": return STREAM; // TODO replace with enum?
         case "smart": return SMART;
@@ -115,6 +117,12 @@ public class FacetField extends FacetRequestSorted {
 
   @Override
   public FacetProcessor createFacetProcessor(FacetContext fcontext) {
+    FacetProcessor processor = createFacetProcessorInternal(fcontext);
+    System.err.println("chosen processor is of class " + processor.getClass().getSimpleName());
+    return processor;
+  }
+
+  private FacetProcessor createFacetProcessorInternal(FacetContext fcontext) {
     SchemaField sf = fcontext.searcher.getSchema().getField(field);
     FieldType ft = sf.getType();
     boolean multiToken = sf.multiValued() || ft.multiValuedFieldCache();
@@ -157,6 +165,14 @@ public class FacetField extends FacetRequestSorted {
           : (null == prelim_sort && FacetSort.INDEX_ASC.equals( sort ) ) ) ) {
           
       return new FacetFieldProcessorByEnumTermsStream(fcontext, this, sf);
+    }
+
+    if (method == FacetMethod.DVSTRING) {
+      if (ntype != null) {
+        throw new SolrException(SolrException.ErrorCode.SERVER_ERROR,
+            "Method " + method + " cannot support numeric-type field " + field);
+      }
+      return new FacetFieldProcessorByHashDVString(fcontext, this, sf);
     }
 
     // TODO if method=UIF and not single-valued numerics then simply choose that now? TODO add FieldType.getDocValuesType()
