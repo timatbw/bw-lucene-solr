@@ -117,12 +117,6 @@ public class FacetField extends FacetRequestSorted {
 
   @Override
   public FacetProcessor createFacetProcessor(FacetContext fcontext) {
-    FacetProcessor processor = createFacetProcessorInternal(fcontext);
-    System.err.println("chosen processor is of class " + processor.getClass().getSimpleName());
-    return processor;
-  }
-
-  private FacetProcessor createFacetProcessorInternal(FacetContext fcontext) {
     SchemaField sf = fcontext.searcher.getSchema().getField(field);
     FieldType ft = sf.getType();
     boolean multiToken = sf.multiValued() || ft.multiValuedFieldCache();

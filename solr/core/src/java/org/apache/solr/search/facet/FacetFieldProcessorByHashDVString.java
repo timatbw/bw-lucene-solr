@@ -18,7 +18,9 @@ package org.apache.solr.search.facet;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.Objects;
 import java.util.function.IntFunction;
 
 import org.apache.lucene.index.BinaryDocValues;
@@ -50,13 +52,17 @@ import org.apache.solr.search.facet.SlotAcc.SlotContext;
  */
 class FacetFieldProcessorByHashDVString extends FacetFieldProcessor {
 
+  static Comparator<Comparable> COMPARATOR = Comparator.<Comparable>nullsLast(Comparator.naturalOrder());
+
   static class TermData {
     int count;
     int slotIndex;
+    SlotAcc accumulator;
   }
 
   private HashMap<BytesRef, TermData> table;
   private ArrayList<BytesRef> slotList;
+  private AggValueSource sortAgg; // non-null if sorting by a stat
 
   int allBucketsSlot = -1; // TODO can we use -1 here? We don't know how many real slots there are until later
 
@@ -97,7 +103,7 @@ class FacetFieldProcessorByHashDVString extends FacetFieldProcessor {
     int possibleValues = fcontext.base.size();
     int hashSize = BitUtil.nextHighestPowerOfTwo((int) (possibleValues * (1 / 0.7) + 1));
     hashSize = Math.min(hashSize, 1024);
-    System.err.println("TPO base size is " + possibleValues + " ... chosen hashmap size is " + hashSize);
+    //System.err.println("TPO base size is " + possibleValues + " ... chosen hashmap size is " + hashSize);
 
     table = new HashMap<>(hashSize);
     slotList = new ArrayList<>();
@@ -177,6 +183,64 @@ class FacetFieldProcessorByHashDVString extends FacetFieldProcessor {
       }
     };
 
+    if (!"count".equals(freq.sortVariable) && !"index".equals(freq.sortVariable)) {
+      sortAgg = freq.getFacetStats().get(freq.sortVariable);
+      if (sortAgg != null) {
+        collectAcc = new SlotAcc(fcontext) {
+          @Override
+          public void collect(int doc, int slot, IntFunction<SlotContext> slotContext) throws IOException {
+            //System.err.println("TPO called collectAcc with doc " + doc + " for slot " + slot);
+            table.get(slotList.get(slot)).accumulator.collect(doc, 0, slotContext);
+          }
+
+          @Override
+          public int compare(int slotA, int slotB) {
+            //System.err.println("TPO called compare for slots " + slotA + " and " + slotB);
+            try {
+              int savedFlags = fcontext.flags; // TODO better way to get sortable value from acc
+              fcontext.flags &= ~FacetContext.IS_SHARD;
+              final Comparable valueA = (Comparable)getValue(slotA);
+              final Comparable valueB = (Comparable)getValue(slotB);
+              fcontext.flags = savedFlags;
+              return COMPARATOR.compare(valueA, valueB);
+            } catch (IOException ioe) {
+              throw new RuntimeException("Failure during facet slot sort", ioe);
+            }
+          }
+
+          @Override
+          public Object getValue(int slotNum) throws IOException {
+            //System.err.println("TPO called getValue for slot " + slotNum);
+            return table.get(slotList.get(slotNum)).accumulator.getValue(0);
+          }
+
+          @Override
+          public void setNextReader(LeafReaderContext readerContext) throws IOException {
+            //System.err.println("TPO called setNextReader");
+            super.setNextReader(readerContext);
+            for (TermData td : table.values()) {
+              td.accumulator.setNextReader(readerContext);
+            }
+          }
+
+          @Override
+          public void reset() throws IOException {
+            for (TermData td : table.values()) {
+              td.accumulator.reset();
+            }
+          }
+
+          @Override
+          public void resize(Resizer resizer) {
+          }
+        };
+        collectAcc.key = freq.sortVariable; // TODO: improve this
+      }
+      sortAcc = collectAcc;
+      deferredAggs = new HashMap<>(freq.getFacetStats());
+      deferredAggs.remove(freq.sortVariable);
+    }
+
     // we set the countAcc & indexAcc first so generic ones won't be created for us.
     super.createCollectAcc(fcontext.base.size(), 1); // TODO fix 1
 
@@ -246,6 +310,10 @@ class FacetFieldProcessorByHashDVString extends FacetFieldProcessor {
     if (termData == null) {
       termData = new TermData();
       termData.slotIndex = slotList.size(); // next position in the list
+      if (sortAgg != null) {
+        termData.accumulator = sortAgg.createSlotAcc(fcontext, -1, 1);
+        termData.accumulator.setNextReader(sortAcc.currentReaderContext);
+      }
       //System.err.println("First appearance of " + val.utf8ToString());
       BytesRef valCopy = BytesRef.deepCopyOf(val);
       table.put(valCopy, termData);
@@ -257,5 +325,4 @@ class FacetFieldProcessorByHashDVString extends FacetFieldProcessor {
         return new SlotContext(sf.getType().getFieldQuery(null, sf, val.utf8ToString()));
       });
   }
-
 }
