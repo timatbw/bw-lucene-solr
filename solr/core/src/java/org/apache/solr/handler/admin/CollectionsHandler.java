@@ -991,6 +991,9 @@ public class CollectionsHandler extends RequestHandlerBase implements Permission
 
       Map<String, Object> params = copy(req.getParams(), null, NAME, COLLECTION_PROP, CoreAdminParams.COMMIT_NAME);
       params.put(CoreAdminParams.BACKUP_LOCATION, location);
+      if ( repo != null ) {
+        params.put(CoreAdminParams.BACKUP_REPOSITORY, repo);
+      }
       params.put(CollectionAdminParams.INDEX_BACKUP_STRATEGY, strategy);
       return params;
     }),
@@ -1043,6 +1046,9 @@ public class CollectionsHandler extends RequestHandlerBase implements Permission
 
       Map<String, Object> params = copy(req.getParams(), null, NAME, COLLECTION_PROP);
       params.put(CoreAdminParams.BACKUP_LOCATION, location);
+      if ( repo != null ) {
+        params.put(CoreAdminParams.BACKUP_REPOSITORY, repo);
+      }
       // from CREATE_OP:
       copy(req.getParams(), params, COLL_CONF, REPLICATION_FACTOR, NRT_REPLICAS, TLOG_REPLICAS,
           PULL_REPLICAS, MAX_SHARDS_PER_NODE, STATE_FORMAT, AUTO_ADD_REPLICAS, CREATE_NODE_SET, CREATE_NODE_SET_SHUFFLE);
