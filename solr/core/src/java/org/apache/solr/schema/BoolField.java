@@ -45,6 +45,7 @@ import org.apache.solr.response.TextResponseWriter;
 import org.apache.solr.search.QParser;
 import org.apache.solr.search.function.OrdFieldSource;
 import org.apache.solr.uninverting.UninvertingReader.Type;
+
 /**
  *
  */
@@ -253,8 +254,8 @@ class BoolFieldSource extends ValueSource {
           return -1;
         }
       }
+
       @Override
-      
       public boolean boolVal(int doc) throws IOException {
         return getOrdForDoc(doc) == trueOrd;
       }
