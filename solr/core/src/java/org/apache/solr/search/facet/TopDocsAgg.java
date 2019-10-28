@@ -34,6 +34,7 @@ import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.search.TotalHits;
 import org.apache.solr.common.SolrDocument;
 import org.apache.solr.common.SolrDocumentList;
 import org.apache.solr.common.SolrException;
@@ -295,9 +296,9 @@ public class TopDocsAgg extends AggValueSource {
       int offset = 0;
       TopDocs topDocs = fcontext.searcher.search(finalQuery, limit, sort);
 
-      long totalHits = topDocs.totalHits;
+      long totalHits = topDocs.totalHits.value;
       int nDocsReturned = topDocs.scoreDocs.length;
-      float maxScore = totalHits>0 ? topDocs.getMaxScore() : 0.0f;
+      float maxScore = totalHits > 0 ? topDocs.scoreDocs[0].score : 0.0f;
       int[] ids = new int[nDocsReturned];
       float scores[] = doScores ? new float[nDocsReturned] : null;
       for (int i=0; i<nDocsReturned; i++) {
@@ -305,11 +306,11 @@ public class TopDocsAgg extends AggValueSource {
         ids[i] = scoreDoc.doc;
         if (scores != null) scores[i] = scoreDoc.score;
       }
-      DocList docList = new DocSlice(offset, ids.length, ids, scores, totalHits, maxScore);
+      DocList docList = new DocSlice(offset, ids.length, ids, scores, totalHits, maxScore, TotalHits.Relation.EQUAL_TO);
 
       result[slot] = new BasicResultContext(docList, returnFields , fcontext.searcher, query, fcontext.req);
 
-      return (int)topDocs.totalHits;
+      return (int)topDocs.totalHits.value;
     }
 
     @Override
