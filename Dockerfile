@@ -1,25 +1,9 @@
-FROM debian:jessie
+FROM debian:stretch
 
-ARG buildn
+ARG VERSION=0
 
-ARG stage
-ARG int
-
-ENV BUILD_NUMBER=$buildn
-ENV SOLR_VERSION=7.4.0
-
-
-ENV STAGE=$stage
-ENV INT=$int
-
-
-RUN echo $SOLR_VERSION
-RUN echo $BUILD_NUMBER
-
-USER root
-
-RUN echo "deb http://http.debian.net/debian jessie-backports main" | \
-     tee --append /etc/apt/sources.list.d/jessie-backports.list > /dev/null && \ 
+RUN echo "deb http://http.debian.net/debian stretch-backports main" | \
+     tee --append /etc/apt/sources.list.d/stretch-backports.list > /dev/null && \ 
      apt-get update -y && \
      apt-get install -y \
      wget \
@@ -29,7 +13,7 @@ RUN echo "deb http://http.debian.net/debian jessie-backports main" | \
      rubygems \
      build-essential \
      git-core && \
-     apt-get install -y -t jessie-backports openjdk-8-jdk && \
+     apt-get install -y -t stretch-backports openjdk-8-jdk && \
      update-java-alternatives -s java-1.8.0-openjdk-amd64 && \
      apt-get upgrade -y
 
@@ -61,16 +45,6 @@ RUN ant jar
 WORKDIR /ant-ivy/build/artifact/jars
 RUN scp ivy.jar /opt/ant/lib
 
-WORKDIR /usr/local
-ADD . bw-lucene-solr/
-WORKDIR /usr/local/bw-lucene-solr/solr
+WORKDIR /solr-main/solr/
 RUN ant ivy-bootstrap && \
-   ant clean compile dist package
-
-
-WORKDIR /usr/local/bw-lucene-solr/solr/package
-
-
-RUN fpm --description "Brandwatch Solr distribution" --name solr -v $SOLR_VERSION-SNAPSHOT-bwbuild${BUILD_NUMBER} --prefix /opt -s tar -t deb solr-$SOLR_VERSION-SNAPSHOT.tgz
-RUN curl http://apt.service0.btn1.bwcom.net/packages -u $INT -F my_file=@solr_$SOLR_VERSION-SNAPSHOT-bwbuild${BUILD_NUMBER}_amd64.deb -F name=solr_$SOLR_VERSION-SNAPSHOT-bwbuild${BUILD_NUMBER}_amd64.deb
-RUN curl https://aptly.stage.brandwatch.net/packages -u $STAGE -F my_file=@solr_$SOLR_VERSION-SNAPSHOT-bwbuild${BUILD_NUMBER}_amd64.deb -F name=solr_$SOLR_VERSION-SNAPSHOT-bwbuild${BUILD_NUMBER}_amd64.deb
+    ant clean compile dist package
