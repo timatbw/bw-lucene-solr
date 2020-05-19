@@ -1,6 +1,6 @@
 #!groovy
-gcpProject =  "bw-prod-platform0"
-baseImageExist = false
+gcpProject = "bw-prod-platform0"
+baseImageExists = false
 
 def doesBaseImageExist(String imageVersion) {
     /*
@@ -21,10 +21,12 @@ def doesBaseImageExist(String imageVersion) {
 }
 
 def pushImage(String imageID, String imageVersion) {
+    buildNumber = "build_${env.BUILD_NUMBER}"
     withEnv(["DOCKER_BUILDKIT=1"]) {
         img = docker.image(imageID)
         docker.withRegistry("https://eu.gcr.io", "gcr:${gcpProject}") {
             img.push(imageVersion)
+            img.push(buildNumber)
         }
     }
 }
@@ -41,36 +43,28 @@ node('docker') {
 
         versions = readJSON file: "versions.json"
         version = versions["version"]
-        major_version = versions["major_version"]
+        ant_version = versions["ant_version"]
     }
 
     stage ('Build images') {
-        baseImageExist = doesBaseImageExist(major_version)
-        if ( baseImageExist ) {
-            echo "Base image exists, using that"
-            withEnv(["DOCKER_BUILDKIT=1"]) {
-                sh """ docker build \
-                    -f Dockerfile \
-                    --build-arg REPO=${gcpProject} \
-                    --build-arg MAJOR_VERSION=${major_version} \
-                    -t ${gcpProject}/bw-lucene-solr:${version} .
-                """
-                pushImage("${gcpProject}/bw-lucene-solr:${version}", version)
-            }
-        } else {
+        baseImageExists = doesBaseImageExist(ant_version)
+        if ( !baseImageExists ) {
             echo "Unable to find base image, building"
             withEnv(["DOCKER_BUILDKIT=1"]) {
-                sh "docker build -f base.Dockerfile -t ${gcpProject}/ant-base:${major_version} ."
-                pushImage("${gcpProject}/ant-base:${major_version}", major_version)
-
-                sh """ docker build \
-                    -f Dockerfile \
-                    --build-arg REPO=${gcpProject} \
-                    --build-arg MAJOR_VERSION=${major_version} \
-                    -t ${gcpProject}/bw-lucene-solr:${version} .
+                sh """ docker build -f base.Dockerfile \
+                    --build-arg ANT_VERSION=${ant_version} \
+                    -t ${gcpProject}/ant-base:${ant_version} .
                 """
-                pushImage("${gcpProject}/bw-lucene-solr:${version}", version)
+                pushImage("${gcpProject}/ant-base:${ant_version}", ant_version)
             }
+        }
+        withEnv(["DOCKER_BUILDKIT=1"]) {
+            sh """ docker build \
+                --build-arg REPO=${gcpProject} \
+                --build-arg ANT_VERSION=${ant_version} \
+                -t ${gcpProject}/bw-lucene-solr:${version} .
+            """
+            pushImage("${gcpProject}/bw-lucene-solr:${version}", version)
         }
     }
 }

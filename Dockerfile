@@ -1,8 +1,8 @@
-ARG REPO=""
-ARG MAJOR_VERSION=latest
-FROM ${REPO}/ant-base:${MAJOR_VERSION}
+ARG REPO
+ARG ANT_VERSION
+FROM ${REPO}/ant-base:${ANT_VERSION}
 
-ADD . /bw-lucene-solr/
+COPY . /bw-lucene-solr/
 WORKDIR /bw-lucene-solr/solr/
 RUN ant ivy-bootstrap && \
-    ant clean compile dist package
+    ant --noconfig -Dtests.badapples=false clean dist package
