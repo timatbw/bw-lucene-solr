@@ -10,7 +10,6 @@ def doesBaseImageExist(String imageVersion) {
         to see if the ant-base image exists in our gcr, if it does, then it'll skip
         building it which should cut down on processing time
     */
-    echo "Test: ${gcpProject} ... ${imageVersion}"
     try {
         img = docker.image("${gcpProject}/ant-base:${imageVersion}").withRun { c ->
             sh 'ant --help'
@@ -47,7 +46,6 @@ node('docker') {
 
     stage ('Build images') {
         baseImageExist = doesBaseImageExist(major_version)
-        /*
         if ( baseImageExist ) {
             echo "Base image exists, using that"
             withEnv(["DOCKER_BUILDKIT=1"]) {
@@ -74,6 +72,5 @@ node('docker') {
                 pushImage("${gcpProject}/bw-lucene-solr:${version}", version)
             }
         }
-        */
     }
 }
