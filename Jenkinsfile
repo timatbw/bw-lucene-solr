@@ -12,14 +12,9 @@ node('docker') {
             userRemoteConfigs: scm.userRemoteConfigs
         ])
 
-        // Could change this to be held within a versions.json file if preferred
-        // def branch = env.BRANCH_NAME
-        // TODO - change this when no longer using this branch name
-        test_branch = 'bw_branch_7_7_2'
-        branch_period = test_branch.replaceAll('_', '.')
-        def regex_capture = branch_period =~ /\d.+/
-        version = regex_capture[0]
-        major_version = version.substring(0,1)
+        versions = readJSON file: "versions.json"
+        version = versions["version"]
+        major_version = versions["major_version"]
     }
 
     stage ('Build images') {
@@ -79,4 +74,3 @@ def doesBaseImageExist(String imageVersion) {
         return false
     }
 }
-
