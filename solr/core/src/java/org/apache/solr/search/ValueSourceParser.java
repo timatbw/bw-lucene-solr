@@ -56,6 +56,7 @@ import org.apache.solr.schema.StrField;
 import org.apache.solr.schema.TextField;
 import org.apache.solr.search.facet.AggValueSource;
 import org.apache.solr.search.facet.AvgAgg;
+import org.apache.solr.search.facet.BitmapCollectorAgg;
 import org.apache.solr.search.facet.CountAgg;
 import org.apache.solr.search.facet.HLLAgg;
 import org.apache.solr.search.facet.MinMaxAgg;
@@ -1055,6 +1056,8 @@ public abstract class ValueSourceParser implements NamedListInitializedPlugin {
     });
     
     addParser("agg_topdocs", new TopDocsAgg.Parser());
+
+    addParser("agg_bitmapcollector", new BitmapCollectorAgg.Parser());
 
     addParser("childfield", new ChildFieldValueSourceParser());
   }
