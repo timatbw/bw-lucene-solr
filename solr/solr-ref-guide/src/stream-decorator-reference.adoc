@@ -595,20 +595,20 @@ while(true) {
 daemonStream.close();
 ----
 
-== delete
+== delete-stream
 
 The `delete` function wraps another functions and uses the `id` and `\_version_` values found to sends the tuples to a SolrCloud collection as <<uploading-data-with-index-handlers.adoc#delete-operations,Delete By Id>> commands.
 
 This is similar to the `<<#update,update()>>` function described below.
 
-=== delete Parameters
+=== delete-stream Parameters
 
 * `destinationCollection`: (Mandatory) The collection where the tuples will deleted.
 * `batchSize`: (Mandatory) The indexing batch size.
 * `pruneVersionField`: (Optional, defaults to `false`) Wether to prune `\_version_` values from tuples
 * `StreamExpression`: (Mandatory)
 
-=== delete Syntax
+=== delete-stream Syntax
 
 [source,text]
 ----
