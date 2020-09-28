@@ -33,10 +33,18 @@ public class TermFrequencySlotAcc extends FuncSlotAcc {
 
   @Override
   public Object getValue(int slotNum) {
-    if (result[slotNum] != null) {
-      return result[slotNum].serialize(termLimit);
+    if (fcontext.isShard()) {
+      if (result[slotNum] != null) {
+        return result[slotNum].serialize(termLimit);
+      } else {
+        return Collections.emptyList();
+      }
     } else {
-      return Collections.emptyList();
+      if (result[slotNum] != null) {
+        return result[slotNum].toFrequencyOfFrequencies();
+      } else {
+        return Collections.emptyMap();
+      }
     }
   }
 
