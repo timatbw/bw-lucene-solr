@@ -62,12 +62,7 @@ public class TermFrequencyOfFrequenciesAgg extends SimpleAggValueSource {
 
     @Override
     public Object getMergedResult() {
-      Map<Integer, Integer> map = new LinkedHashMap<>();
-
-      result.getCounters()
-        .forEach((value, freq) -> map.merge(freq, 1, Integer::sum));
-
-      return map;
+      return result.toFrequencyOfFrequencies();
     }
   }
 }

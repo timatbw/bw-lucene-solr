@@ -1,6 +1,7 @@
 package org.apache.solr.search.facet;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -35,5 +36,13 @@ public class TermFrequencyCounter {
     serialized.forEach((value, freq) -> counters.merge(value, freq, Integer::sum));
 
     return this;
+  }
+
+  public Map<Integer, Integer> toFrequencyOfFrequencies() {
+    Map<Integer, Integer> map = new LinkedHashMap<>();
+
+    counters.forEach((value, freq) -> map.merge(freq, 1, Integer::sum));
+
+    return map;
   }
 }
