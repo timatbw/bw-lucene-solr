@@ -335,9 +335,6 @@ public abstract class FacetProcessor<FacetRequestT extends FacetRequest>  {
   }
 
   int collect(DocSet docs, int slot, IntFunction<SlotContext> slotContext) throws IOException {
-    int count = 0;
-    SolrIndexSearcher searcher = fcontext.searcher;
-
     if (0 == docs.size()) {
       // we may be in a "processEmpty" type situation where the client still cares about this bucket
       // either way, we should let our accumulators know about the empty set, so they can collect &
@@ -347,35 +344,8 @@ public abstract class FacetProcessor<FacetRequestT extends FacetRequest>  {
           acc.collect(docs, slot, slotContext); // NOT per-seg collectors
         }
       }
-      return count;
     }
-    
-    final List<LeafReaderContext> leaves = searcher.getIndexReader().leaves();
-    final Iterator<LeafReaderContext> ctxIt = leaves.iterator();
-    LeafReaderContext ctx = null;
-    int segBase = 0;
-    int segMax;
-    int adjustedMax = 0;
-    for (DocIterator docsIt = docs.iterator(); docsIt.hasNext(); ) {
-      final int doc = docsIt.nextDoc();
-      if (doc >= adjustedMax) {
-        do {
-          ctx = ctxIt.next();
-          if (ctx == null) {
-            // should be impossible
-            throw new RuntimeException("INTERNAL FACET ERROR");
-          }
-          segBase = ctx.docBase;
-          segMax = ctx.reader().maxDoc();
-          adjustedMax = segBase + segMax;
-        } while (doc >= adjustedMax);
-        assert doc >= ctx.docBase;
-        setNextReader(ctx);
-      }
-      count++;
-      collect(doc - segBase, slot, slotContext);  // per-seg collectors
-    }
-    return count;
+    return docs.size();
   }
 
   void collect(int segDoc, int slot, IntFunction<SlotContext> slotContext) throws IOException {
