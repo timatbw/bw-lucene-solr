@@ -9,6 +9,7 @@ import java.util.Map;
 
 import org.apache.lucene.util.LuceneTestCase;
 import org.apache.solr.common.util.JavaBinCodec;
+import org.apache.solr.common.util.SimpleOrderedMap;
 import org.junit.Test;
 
 public class TermFrequencyCounterTest extends LuceneTestCase {
@@ -101,7 +102,7 @@ public class TermFrequencyCounterTest extends LuceneTestCase {
     assertEquals(
       "value " + value + " should have count " + count,
       count,
-      (int) counter.getCounters().getOrDefault(value, 0)
+      (int) counter.getCounts().getOrDefault(value, 0)
     );
   }
 
@@ -113,7 +114,7 @@ public class TermFrequencyCounterTest extends LuceneTestCase {
 
     InputStream in = new ByteArrayInputStream(out.toByteArray());
     counter = new TermFrequencyCounter();
-    counter.merge((Map<String, Integer>) codec.unmarshal(in));
+    counter.merge((SimpleOrderedMap<Object>) codec.unmarshal(in));
 
     return counter;
   }
@@ -129,7 +130,7 @@ public class TermFrequencyCounterTest extends LuceneTestCase {
     codec.marshal(toMerge.serialize(limit), out);
 
     InputStream in = new ByteArrayInputStream(out.toByteArray());
-    counter.merge((Map<String, Integer>) codec.unmarshal(in));
+    counter.merge((SimpleOrderedMap<Object>) codec.unmarshal(in));
 
     return counter;
   }
