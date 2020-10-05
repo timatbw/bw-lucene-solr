@@ -6,6 +6,7 @@ import java.util.Collections;
 import java.util.function.IntFunction;
 
 import org.apache.lucene.queries.function.ValueSource;
+import org.apache.solr.common.util.SimpleOrderedMap;
 
 public class TermFrequencySlotAcc extends FuncSlotAcc {
   private TermFrequencyCounter[] result;
@@ -37,13 +38,13 @@ public class TermFrequencySlotAcc extends FuncSlotAcc {
       if (result[slotNum] != null) {
         return result[slotNum].serialize(termLimit);
       } else {
-        return Collections.emptyList();
+        return new SimpleOrderedMap<>();
       }
     } else {
       if (result[slotNum] != null) {
         return result[slotNum].toFrequencyOfFrequencies();
       } else {
-        return Collections.emptyMap();
+        return new SimpleOrderedMap<>();
       }
     }
   }

@@ -1,9 +1,7 @@
 package org.apache.solr.search.facet;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
-
 import org.apache.lucene.queries.function.ValueSource;
+import org.apache.solr.common.util.SimpleOrderedMap;
 import org.apache.solr.search.FunctionQParser;
 import org.apache.solr.search.SyntaxError;
 import org.apache.solr.search.ValueSourceParser;
@@ -50,8 +48,8 @@ public class TermFrequencyOfFrequenciesAgg extends SimpleAggValueSource {
 
     @Override
     public void merge(Object facetResult, Context mcontext) {
-      if (facetResult instanceof Map) {
-        result.merge((Map<String, Integer>) facetResult);
+      if (facetResult instanceof SimpleOrderedMap) {
+        result.merge((SimpleOrderedMap<Object>) facetResult);
       }
     }
 
