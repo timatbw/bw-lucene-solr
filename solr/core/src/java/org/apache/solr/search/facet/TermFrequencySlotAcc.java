@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.function.IntFunction;
+import org.apache.solr.search.facet.SlotAcc.FuncSlotAcc;
 
 import org.apache.lucene.queries.function.ValueSource;
 import org.apache.solr.common.util.SimpleOrderedMap;
