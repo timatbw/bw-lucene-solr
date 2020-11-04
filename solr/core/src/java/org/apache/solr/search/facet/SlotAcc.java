@@ -275,11 +275,11 @@ public abstract class SlotAcc implements Closeable {
 
   // TODO: we should really have a decoupled value provider...
 // This would enhance reuse and also prevent multiple lookups of same value across diff stats
-  abstract static class FuncSlotAcc extends SlotAcc {
+  public abstract static class FuncSlotAcc extends SlotAcc {
     protected final ValueSource valueSource;
     protected FunctionValues values;
 
-  public FuncSlotAcc(ValueSource values, FacetContext fcontext, int numSlots) {
+    public FuncSlotAcc(ValueSource values, FacetContext fcontext, int numSlots) {
       super(fcontext);
       this.valueSource = values;
     }
@@ -298,15 +298,15 @@ public abstract class SlotAcc implements Closeable {
 // double-slot-func -> func-slot -> slot -> acc
 // double-slot-func -> double-slot -> slot -> acc
 
-  abstract static class DoubleFuncSlotAcc extends FuncSlotAcc {
-    double[] result; // TODO: use DoubleArray
-    double initialValue;
+  public abstract static class DoubleFuncSlotAcc extends FuncSlotAcc {
+    protected double[] result; // TODO: use DoubleArray
+    protected double initialValue;
 
-  public DoubleFuncSlotAcc(ValueSource values, FacetContext fcontext, int numSlots) {
+    public DoubleFuncSlotAcc(ValueSource values, FacetContext fcontext, int numSlots) {
       this(values, fcontext, numSlots, 0);
     }
 
-  public DoubleFuncSlotAcc(ValueSource values, FacetContext fcontext, int numSlots, double initialValue) {
+    public DoubleFuncSlotAcc(ValueSource values, FacetContext fcontext, int numSlots, double initialValue) {
       super(values, fcontext, numSlots);
       this.initialValue = initialValue;
       result = new double[numSlots];
@@ -336,11 +336,11 @@ public abstract class SlotAcc implements Closeable {
     }
   }
 
-  abstract static class LongFuncSlotAcc extends FuncSlotAcc {
-    long[] result;
-    long initialValue;
+  public abstract static class LongFuncSlotAcc extends FuncSlotAcc {
+    protected long[] result;
+    protected long initialValue;
 
-  public LongFuncSlotAcc(ValueSource values, FacetContext fcontext, int numSlots, long initialValue) {
+    public LongFuncSlotAcc(ValueSource values, FacetContext fcontext, int numSlots, long initialValue) {
       super(values, fcontext, numSlots);
       this.initialValue = initialValue;
       result = new long[numSlots];
@@ -370,11 +370,11 @@ public abstract class SlotAcc implements Closeable {
     }
   }
 
-  abstract class IntSlotAcc extends SlotAcc {
-    int[] result; // use LongArray32
-    int initialValue;
+  public abstract static class IntSlotAcc extends SlotAcc {
+    protected int[] result; // use LongArray32
+    protected int initialValue;
 
-  public IntSlotAcc(FacetContext fcontext, int numSlots, int initialValue) {
+    public IntSlotAcc(FacetContext fcontext, int numSlots, int initialValue) {
       super(fcontext);
       this.initialValue = initialValue;
       result = new int[numSlots];
@@ -432,7 +432,7 @@ public abstract class SlotAcc implements Closeable {
   static class AvgSlotAcc extends DoubleFuncSlotAcc {
     int[] counts;
 
-  public AvgSlotAcc(ValueSource values, FacetContext fcontext, int numSlots) {
+    public AvgSlotAcc(ValueSource values, FacetContext fcontext, int numSlots) {
       super(values, fcontext, numSlots);
       counts = new int[numSlots];
     }
@@ -486,7 +486,7 @@ public abstract class SlotAcc implements Closeable {
     int[] counts;
     double[] sum;
 
-  public VarianceSlotAcc(ValueSource values, FacetContext fcontext, int numSlots) {
+    public VarianceSlotAcc(ValueSource values, FacetContext fcontext, int numSlots) {
       super(values, fcontext, numSlots);
       counts = new int[numSlots];
       sum = new double[numSlots];
@@ -507,7 +507,7 @@ public abstract class SlotAcc implements Closeable {
     }
 
     private double variance(int slot) {
-    return AggUtil.uncorrectedVariance(result[slot], sum[slot], counts[slot]); // calc once and cache in result?
+      return AggUtil.uncorrectedVariance(result[slot], sum[slot], counts[slot]); // calc once and cache in result?
     }
 
     @Override
@@ -543,7 +543,7 @@ public abstract class SlotAcc implements Closeable {
     int[] counts;
     double[] sum;
 
-  public StddevSlotAcc(ValueSource values, FacetContext fcontext, int numSlots) {
+    public StddevSlotAcc(ValueSource values, FacetContext fcontext, int numSlots) {
       super(values, fcontext, numSlots);
       counts = new int[numSlots];
       sum = new double[numSlots];
@@ -564,7 +564,7 @@ public abstract class SlotAcc implements Closeable {
     }
 
     private double stdDev(int slot) {
-    return AggUtil.uncorrectedStdDev(result[slot], sum[slot], counts[slot]); // calc once and cache in result?
+      return AggUtil.uncorrectedStdDev(result[slot], sum[slot], counts[slot]); // calc once and cache in result?
     }
 
     @Override
@@ -602,9 +602,9 @@ public abstract class SlotAcc implements Closeable {
       super(fcontext);
     }
 
-  public abstract void incrementCount(int slot, int count);
+    public abstract void incrementCount(int slot, int count);
 
-  public abstract int getCount(int slot);
+    public abstract int getCount(int slot);
   }
 
   /**
@@ -667,9 +667,9 @@ public abstract class SlotAcc implements Closeable {
   static class CountSlotArrAcc extends CountSlotAcc {
     int[] result;
 
-  public CountSlotArrAcc(FacetContext fcontext, int numSlots) {
+    public CountSlotArrAcc(FacetContext fcontext, int numSlots) {
       super(fcontext);
-    result = new int[numSlots];
+      result = new int[numSlots];
     }
 
     @Override
@@ -681,7 +681,7 @@ public abstract class SlotAcc implements Closeable {
 
     @Override
     public int compare(int slotA, int slotB) {
-    return Integer.compare(result[slotA], result[slotB]);
+      return Integer.compare(result[slotA], result[slotB]);
     }
 
     @Override
@@ -689,16 +689,16 @@ public abstract class SlotAcc implements Closeable {
       return result[slotNum];
     }
 
-  public void incrementCount(int slot, int count) {
+    public void incrementCount(int slot, int count) {
       result[slot] += count;
     }
 
-  public int getCount(int slot) {
+    public int getCount(int slot) {
       return result[slot];
     }
 
     // internal and expert
-  int[] getCountArray() {
+    int[] getCountArray() {
       return result;
     }
 
