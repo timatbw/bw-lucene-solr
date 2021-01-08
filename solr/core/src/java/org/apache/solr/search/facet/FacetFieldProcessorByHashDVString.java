@@ -20,23 +20,17 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.Objects;
 import java.util.function.IntFunction;
 
-import org.apache.lucene.index.BinaryDocValues;
 import org.apache.lucene.index.DocValues;
 import org.apache.lucene.index.DocValuesType;
 import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.index.MultiDocValues;
-import org.apache.lucene.index.NumericDocValues;
 import org.apache.lucene.index.SortedDocValues;
-import org.apache.lucene.index.SortedNumericDocValues;
 import org.apache.lucene.index.SortedSetDocValues;
 import org.apache.lucene.search.SimpleCollector;
 import org.apache.lucene.util.BitUtil;
 import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.LongValues;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.util.SimpleOrderedMap;
 import org.apache.solr.schema.SchemaField;
@@ -57,14 +51,15 @@ class FacetFieldProcessorByHashDVString extends FacetFieldProcessor {
   static class TermData {
     int count;
     int slotIndex;
-    SlotAcc accumulator;
+    SlotAcc accumulator; // only used if sorting by a stat
   }
 
+  // Using a regular HashMap hence slots get created dynamically as new keys are found from docvalues
+  // Note that unlike dvhash we do not using multiple slot accumulators and call resize, instead this
+  // approach creates a single-slot accumulator for each table entry
   private HashMap<BytesRef, TermData> table;
-  private ArrayList<BytesRef> slotList;
+  private ArrayList<BytesRef> slotList; // position in List is the slot number, value is key for table
   private AggValueSource sortAgg; // non-null if sorting by a stat
-
-  int allBucketsSlot = -1; // TODO can we use -1 here? We don't know how many real slots there are until later
 
   FacetFieldProcessorByHashDVString(FacetContext fcontext, FacetField freq, SchemaField sf) {
     super(fcontext, freq, sf);
@@ -103,7 +98,7 @@ class FacetFieldProcessorByHashDVString extends FacetFieldProcessor {
     int possibleValues = fcontext.base.size();
     int hashSize = BitUtil.nextHighestPowerOfTwo((int) (possibleValues * (1 / 0.7) + 1));
     hashSize = Math.min(hashSize, 1024);
-    //System.err.println("TPO base size is " + possibleValues + " ... chosen hashmap size is " + hashSize);
+    //System.out.println("TPO base size is " + possibleValues + " ... chosen hashmap size is " + hashSize);
 
     table = new HashMap<>(hashSize);
     slotList = new ArrayList<>();
@@ -122,6 +117,7 @@ class FacetFieldProcessorByHashDVString extends FacetFieldProcessor {
 
   private void createCollectAcc() throws IOException {
 
+    // This only gets used for sorting so doesn't need to collect, just implements compare
     indexOrderAcc = new SlotAcc(fcontext) {
       @Override
       public void collect(int doc, int slot, IntFunction<SlotContext> slotContext) throws IOException {
@@ -146,6 +142,8 @@ class FacetFieldProcessorByHashDVString extends FacetFieldProcessor {
       }
     };
 
+    // This implementation never needs to collect docs, it only gets used to report count per-slot
+    // for the response, and if used for sorting by count, both of which it can do by using the table
     countAcc = new CountSlotAcc(fcontext) {
       @Override
       public void incrementCount(int slot, int count) {
@@ -183,19 +181,30 @@ class FacetFieldProcessorByHashDVString extends FacetFieldProcessor {
       }
     };
 
-    if (!"count".equals(freq.sortVariable) && !"index".equals(freq.sortVariable)) {
-      sortAgg = freq.getFacetStats().get(freq.sortVariable);
+    // we set the countAcc & indexAcc first so generic ones won't be created for us.
+    super.createCollectAcc(fcontext.base.size(), 1);
+
+    // when sorting by a stat, we create an adaptor SlotAcc that uses the table as its backing data
+    if (!"count".equals(freq.sort.sortVariable) && !"index".equals(freq.sort.sortVariable)) {
+      sortAgg = freq.getFacetStats().get(freq.sort.sortVariable);
+      //System.out.println("TPOx sortAgg=" + sortAgg + " var=" + freq.sort.sortVariable + " and stats has " + freq.getFacetStats().keySet());
       if (sortAgg != null) {
+        // Easiest to create a SlotAcc for allBuckets whether we use it or not
+        final SlotAcc allBucketsDelegate = sortAgg.createSlotAcc(fcontext, -1, 1);
         collectAcc = new SlotAcc(fcontext) {
           @Override
           public void collect(int doc, int slot, IntFunction<SlotContext> slotContext) throws IOException {
-            //System.err.println("TPO called collectAcc with doc " + doc + " for slot " + slot);
-            table.get(slotList.get(slot)).accumulator.collect(doc, 0, slotContext);
+            System.out.println("TPOx called collectAcc with doc " + doc + " for slot " + slot);
+            if (slot >= 0) {
+              table.get(slotList.get(slot)).accumulator.collect(doc, 0, slotContext);
+            } else {
+              allBucketsDelegate.collect(doc, 0, slotContext);
+            }
           }
 
           @Override
           public int compare(int slotA, int slotB) {
-            //System.err.println("TPO called compare for slots " + slotA + " and " + slotB);
+            //System.out.println("TPO called compare for slots " + slotA + " and " + slotB);
             try {
               int savedFlags = fcontext.flags; // TODO better way to get sortable value from acc
               fcontext.flags &= ~FacetContext.IS_SHARD;
@@ -210,14 +219,19 @@ class FacetFieldProcessorByHashDVString extends FacetFieldProcessor {
 
           @Override
           public Object getValue(int slotNum) throws IOException {
-            //System.err.println("TPO called getValue for slot " + slotNum);
-            return table.get(slotList.get(slotNum)).accumulator.getValue(0);
+            //System.out.println("TPO called getValue for slot " + slotNum);
+            if (slotNum >= 0) {
+              return table.get(slotList.get(slotNum)).accumulator.getValue(0);
+            } else {
+              return allBucketsDelegate.getValue(0);
+            }
           }
 
           @Override
           public void setNextReader(LeafReaderContext readerContext) throws IOException {
-            //System.err.println("TPO called setNextReader");
+            //System.out.println("TPO called setNextReader");
             super.setNextReader(readerContext);
+            allBucketsDelegate.setNextReader(readerContext);
             for (TermData td : table.values()) {
               td.accumulator.setNextReader(readerContext);
             }
@@ -225,6 +239,7 @@ class FacetFieldProcessorByHashDVString extends FacetFieldProcessor {
 
           @Override
           public void reset() throws IOException {
+            allBucketsDelegate.reset();
             for (TermData td : table.values()) {
               td.accumulator.reset();
             }
@@ -234,18 +249,14 @@ class FacetFieldProcessorByHashDVString extends FacetFieldProcessor {
           public void resize(Resizer resizer) {
           }
         };
-        collectAcc.key = freq.sortVariable; // TODO: improve this
+        collectAcc.key = freq.sort.sortVariable;
       }
       sortAcc = collectAcc;
-      deferredAggs = new HashMap<>(freq.getFacetStats());
-      deferredAggs.remove(freq.sortVariable);
+      deferredAggs.remove(freq.sort.sortVariable);
     }
 
-    // we set the countAcc & indexAcc first so generic ones won't be created for us.
-    super.createCollectAcc(fcontext.base.size(), 1); // TODO fix 1
-
     if (freq.allBuckets) {
-      allBucketsAcc = new SpecialSlotAcc(fcontext, collectAcc, allBucketsSlot, otherAccs, 0);
+      allBucketsAcc = new SpecialSlotAcc(fcontext, collectAcc, -1, otherAccs, 0);
     }
   }
 
@@ -253,7 +264,8 @@ class FacetFieldProcessorByHashDVString extends FacetFieldProcessor {
 
     if (sf.multiValued()) {
       DocSetUtil.collectSortedDocSet(fcontext.base, fcontext.searcher.getIndexReader(), new SimpleCollector() {
-        SortedSetDocValues values = null; //NN
+        SortedSetDocValues values = null;
+        HashMap<Long, BytesRef> segOrdinalValueCache; // avoid repeated lookups of the same ordinal, in this seg
 
         @Override public boolean needsScores() { return false; }
 
@@ -261,19 +273,27 @@ class FacetFieldProcessorByHashDVString extends FacetFieldProcessor {
         protected void doSetNextReader(LeafReaderContext ctx) throws IOException {
           setNextReaderFirstPhase(ctx);
           values = DocValues.getSortedSet(ctx.reader(), sf.getName());
+          segOrdinalValueCache = new HashMap<>((int)values.getValueCount());
+          System.out.println("TPOm setNextReader to " + ctx.ord + " with base=" + ctx.docBase + " and dv has " +
+              values.getValueCount());
         }
 
         @Override
         public void collect(int segDoc) throws IOException {
           if (values.advanceExact(segDoc)) {
-            //System.err.println("TPO collecting doc " + segDoc);
+            System.out.println(" TPOm collecting segDoc " + segDoc);
             // TODO not fully clear if values.nextOrd may return duplicates or not (if a doc has the same value twice)
             long previousOrdinal = -1L;
             long ordinal;
             while ((ordinal = values.nextOrd()) != SortedSetDocValues.NO_MORE_ORDS) {
               if (ordinal != previousOrdinal) {
-                //System.err.println("  TPO found ordinal " + ordinal + " with value " + values.lookupOrd(ordinal).utf8ToString());
-                collectValFirstPhase(segDoc, values.lookupOrd(ordinal));
+                BytesRef docValue = segOrdinalValueCache.get(ordinal);
+                if (docValue == null) {
+                  docValue = BytesRef.deepCopyOf(values.lookupOrd(ordinal));
+                  segOrdinalValueCache.put(ordinal, docValue);
+                }
+                System.out.println("  TPOm found ordinal " + ordinal + " with value " + docValue.utf8ToString());
+                collectValFirstPhase(segDoc, docValue);
               }
               previousOrdinal = ordinal;
             }
@@ -283,21 +303,33 @@ class FacetFieldProcessorByHashDVString extends FacetFieldProcessor {
 
     } else {
       DocSetUtil.collectSortedDocSet(fcontext.base, fcontext.searcher.getIndexReader(), new SimpleCollector() {
-        BinaryDocValues values = null; //NN
+        SortedDocValues values = null;
+        HashMap<Integer, BytesRef> segOrdinalValueCache; // avoid repeated lookups of the same ordinal, in this seg
 
         @Override public boolean needsScores() { return false; }
 
         @Override
         protected void doSetNextReader(LeafReaderContext ctx) throws IOException {
           setNextReaderFirstPhase(ctx);
-          values = DocValues.getBinary(ctx.reader(), sf.getName());
+          values = DocValues.getSorted(ctx.reader(), sf.getName());
+          segOrdinalValueCache = new HashMap<>(values.getValueCount());
+          System.out.println("TPO setNextReader to " + ctx.ord + " with base=" + ctx.docBase + " and dv has " +
+              values.getValueCount() + " values");
         }
 
         @Override
         public void collect(int segDoc) throws IOException {
           if (values.advanceExact(segDoc)) {
-            //System.err.println("TPO collecting doc " + segDoc + " has value " + values.binaryValue().utf8ToString());
-            collectValFirstPhase(segDoc, values.binaryValue());
+            int docOrdinal = values.ordValue();
+            BytesRef docValue = segOrdinalValueCache.get(docOrdinal);
+            if (docValue == null) {
+              docValue = BytesRef.deepCopyOf(values.binaryValue());
+              segOrdinalValueCache.put(docOrdinal, docValue);
+//            } else {
+//              System.out.println("  reused cached value of ordinal " + docOrdinal);
+            }
+            System.out.println("  TPO collecting segDoc " + segDoc + " with ord " + docOrdinal + " with value " + docValue.utf8ToString());
+            collectValFirstPhase(segDoc, docValue);
           }
         }
       });
@@ -314,10 +346,9 @@ class FacetFieldProcessorByHashDVString extends FacetFieldProcessor {
         termData.accumulator = sortAgg.createSlotAcc(fcontext, -1, 1);
         termData.accumulator.setNextReader(sortAcc.currentReaderContext);
       }
-      //System.err.println("First appearance of " + val.utf8ToString());
-      BytesRef valCopy = BytesRef.deepCopyOf(val);
-      table.put(valCopy, termData);
-      slotList.add(valCopy);
+      System.out.println("First appearance of " + val.utf8ToString());
+      table.put(val, termData);
+      slotList.add(val);
     }
     termData.count++;
 
