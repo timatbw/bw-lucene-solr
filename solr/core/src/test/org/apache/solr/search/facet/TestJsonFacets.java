@@ -1257,13 +1257,16 @@ public class TestJsonFacets extends SolrTestCaseHS {
             //      "top : 'topdocs(\"*:*\",0,3,\"${cat_s} desc\",\"id,*_s\")' " +
             //      "top : 'topdocs(\"*:*\")'" +
             //      "top : { topdocs : '${cat_s}:B' } " +
-            "topA : { type:topdocs, query:'${cat_s}:A', sort:'num_d desc', limit:10, fields:'id,*_s,mynum:${num_d}' } " +
-            ",topB: { type:topdocs, query:'${cat_s}:B', sort:'num_d desc', limit:10, fields:'id,*_s,mynum:${num_d}' } " +
+            "topA : { type:topdocs, query:'${cat_s}:A', sort:'${num_d} desc', limit:10, fields:'id,mynum:${num_d}' } " +
+            ",topB: { type:topdocs, query:'${cat_s}:B', sort:'${num_d} desc', limit:10, fields:'id,mynum:${num_d}' } " +
             "}"
         )
-        , "facets=={}"
+        , "facets=={" +
+            "  'count':6," +
+            "  'topA': {'numFound':2, 'start':0, 'docs': [{'id':'1', 'mynum':4.0}, {'id':'4', 'mynum':2.0}]}," +
+            "  'topB': {'numFound':3, 'start':0, 'docs': [{'id':'5', 'mynum':11.0}, {'id':'6', 'mynum':-5.0}, {'id':'2', 'mynum':-9.0}]}" +
+            "}"
     );
-
 
     // straight query facets
     client.testJQ(params(p, "q", "*:*"

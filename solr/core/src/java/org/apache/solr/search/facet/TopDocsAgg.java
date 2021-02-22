@@ -42,9 +42,11 @@ import org.apache.solr.request.SolrQueryRequest;
 import org.apache.solr.request.SolrRequestInfo;
 import org.apache.solr.response.BasicResultContext;
 import org.apache.solr.response.ResultContext;
+import org.apache.solr.response.SolrQueryResponse;
 import org.apache.solr.search.DocList;
 import org.apache.solr.search.DocSet;
 import org.apache.solr.search.DocSlice;
+import org.apache.solr.search.Filter;
 import org.apache.solr.search.FunctionQParser;
 import org.apache.solr.search.QParser;
 import org.apache.solr.search.QueryUtils;
@@ -172,19 +174,8 @@ public class TopDocsAgg extends AggValueSource {
 
     if (fieldsArg == null && fcontext.isShard()) { // shard requests normally only ask for fl=id,score
       returnFields = new SolrReturnFields();
-    } else if (fieldsArg == null) {
-      returnFields = rb.rsp.getReturnFields();
-    } else if (fieldsArg instanceof String) {
-      returnFields = new SolrReturnFields((String)fieldsArg, fcontext.req);
     } else {
-      String[] fl = null;
-      if (fieldsArg instanceof List) {
-        List lst = (List)fieldsArg;
-        fl = (String[])lst.toArray(new String[lst.size()]);
-      } else {
-        fl = (String[])fieldsArg;
-      }
-      returnFields = new SolrReturnFields(fl, fcontext.req);
+      returnFields = buildReturnFields(fcontext.req, rb.rsp);
     }
 
     // Validate sort fields are in return fields
@@ -208,6 +199,23 @@ public class TopDocsAgg extends AggValueSource {
     // todo: only create weight once?
 
     return new Acc(fcontext, query2, sort2, returnFields, numSlots);
+  }
+
+  private ReturnFields buildReturnFields(SolrQueryRequest req, SolrQueryResponse rsp) {
+    if (fieldsArg == null) {
+      return rsp.getReturnFields();
+    } else if (fieldsArg instanceof String) {
+      return new SolrReturnFields((String)fieldsArg, req);
+    } else {
+      String[] fl = null;
+      if (fieldsArg instanceof List) {
+        List lst = (List)fieldsArg;
+        fl = (String[])lst.toArray(new String[lst.size()]);
+      } else {
+        fl = (String[])fieldsArg;
+      }
+      return new SolrReturnFields(fl, req);
+    }
   }
 
   private Sort buildSort(SolrQueryRequest req, ResponseBuilder rb) {
@@ -276,7 +284,9 @@ public class TopDocsAgg extends AggValueSource {
     private int buildResultForSlot(Query slotQuery, int slot) throws IOException {
       BooleanQuery.Builder builder = new BooleanQuery.Builder();
       builder.add(query, BooleanClause.Occur.MUST);
-      builder.add(slotQuery, BooleanClause.Occur.FILTER);
+      if (slotQuery != null) {
+        builder.add(slotQuery, BooleanClause.Occur.FILTER);
+      }
       builder.add(fcontext.base.getTopFilter(), BooleanClause.Occur.FILTER);
       Query finalQuery = builder.build();
 
@@ -354,6 +364,8 @@ public class TopDocsAgg extends AggValueSource {
       SolrRequestInfo requestInfo = SolrRequestInfo.getRequestInfo();
       Sort sort = buildSort(requestInfo.getReq(), requestInfo.getResponseBuilder());
       if (sort != null) {
+        ReturnFields returnFields = buildReturnFields(requestInfo.getReq(), requestInfo.getRsp());
+        Map<String, String> renames = returnFields.getFieldRenames();
         SortField[] sortFields = sort.getSort();
         Comparator<Comparable> fieldComparator = Comparator.<Comparable>nullsLast(Comparator.<Comparable>naturalOrder());
 
@@ -361,9 +373,11 @@ public class TopDocsAgg extends AggValueSource {
           @Override
           public int compare(SolrDocument doc1, SolrDocument doc2) {
             for (int i = 0; i<sortFields.length; i++) {
+              String originalSortName = sortFields[i].getField();
+              String finalSortFieldName = renames.getOrDefault(originalSortName, originalSortName);
               int comparisonValue = fieldComparator.compare(
-                  (Comparable)doc1.get(sortFields[i].getField()),
-                  (Comparable)doc2.get(sortFields[i].getField())
+                  (Comparable)doc1.get(finalSortFieldName),
+                  (Comparable)doc2.get(finalSortFieldName)
               );
               if (comparisonValue != 0) {
                 int directionFactor = sortFields[i].getReverse() ? -1 : 1;
