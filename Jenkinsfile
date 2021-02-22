@@ -27,6 +27,11 @@ node('docker') {
         ant_version = versions["ant_version"]
     }
 
+    stage ('Tests') {
+        sh "ant ivy-bootstrap"
+        sh "ant -Dtests.badapples=false test"
+    }
+
     stage ('Build images') {
         withEnv(["DOCKER_BUILDKIT=1"]) {
             sh """ docker build -f base.Dockerfile \
