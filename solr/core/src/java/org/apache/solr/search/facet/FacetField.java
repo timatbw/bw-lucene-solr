@@ -122,11 +122,9 @@ public class FacetField extends FacetRequestSorted {
     }
 
     if (method == FacetMethod.DVSTRING) {
-      if (ntype != null) {
-        throw new SolrException(SolrException.ErrorCode.SERVER_ERROR,
-            "Method " + method + " cannot support numeric-type field " + field);
+      if (mincount > 0 && prefix == null && ntype == null && sf.hasDocValues()) {
+        return new FacetFieldProcessorByHashDVString(fcontext, this, sf);
       }
-      return new FacetFieldProcessorByHashDVString(fcontext, this, sf);
     }
 
     // TODO if method=UIF and not single-valued numerics then simply choose that now? TODO add FieldType.getDocValuesType()

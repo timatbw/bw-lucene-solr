@@ -54,6 +54,7 @@ class FacetFieldProcessorByHashDVString extends FacetFieldProcessor {
   private HashMap<BytesRef, TermData> table;
   private ArrayList<BytesRef> slotList; // position in List is the slot number, value is key for table
   private int capacity; // how many slots we will need for accs, gets resized later if needed
+  private boolean multiValuedField;
 
   FacetFieldProcessorByHashDVString(FacetContext fcontext, FacetField freq, SchemaField sf) {
     super(fcontext, freq, sf);
@@ -72,6 +73,7 @@ class FacetFieldProcessorByHashDVString extends FacetFieldProcessor {
       throw new SolrException(SolrException.ErrorCode.BAD_REQUEST,
           getClass()+" only supports string with docValues");
     }
+    multiValuedField = sf.multiValued() || sf.getType().multiValuedFieldCache();
   }
 
   @Override
@@ -181,7 +183,7 @@ class FacetFieldProcessorByHashDVString extends FacetFieldProcessor {
 
   private void collectDocs() throws IOException {
 
-    if (sf.multiValued()) {
+    if (multiValuedField) {
       DocSetUtil.collectSortedDocSet(fcontext.base, fcontext.searcher.getIndexReader(), new SimpleCollector() {
         SortedSetDocValues values = null;
         HashMap<Long, BytesRef> segOrdinalValueCache; // avoid repeated lookups of the same ordinal, in this seg
