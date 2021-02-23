@@ -1260,6 +1260,7 @@ public class QueryEqualityTest extends SolrTestCaseJ4 {
     assertFuncEquals("agg(countvals(foo_i))", "agg(countvals(foo_i))");
     assertFuncEquals("agg_countvals(field(foo_i))", "agg_countvals(field(foo_i))");
     assertFuncEquals("agg_topdocs(foo_i)", "agg_topdocs(foo_i)");
+    assertFuncEquals("agg_termfreqfreq(foo_i)", "agg_termfreqfreq(foo_i)");
     // assertFuncEquals("agg_multistat(foo_i)", "agg_multistat(foo_i)");
   }
 
