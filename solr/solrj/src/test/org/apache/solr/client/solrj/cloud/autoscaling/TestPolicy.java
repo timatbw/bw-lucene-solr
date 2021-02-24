@@ -1020,7 +1020,7 @@ public class TestPolicy extends SolrTestCaseJ4 {
     operation = suggester.getSuggestion();
     assertNotNull(operation);
     assertEquals("node2", operation.getParams().get("targetNode"));
-    assertEquals("r3", operation.getParams().get("replica"));
+    assertEquals("r1", operation.getParams().get("replica"));
 
     session = suggester.getSession();
     suggester = session.getSuggester(MOVEREPLICA)
@@ -1028,14 +1028,14 @@ public class TestPolicy extends SolrTestCaseJ4 {
     operation = suggester.getSuggestion();
     assertNotNull(operation);
     assertEquals("node2", operation.getParams().get("targetNode"));
-    assertEquals("r5", operation.getParams().get("replica"));
+    assertEquals("r3", operation.getParams().get("replica"));
 
     session = suggester.getSession();
     suggester = session.getSuggester(MOVEREPLICA)
         .hint(Hint.SRC_NODE, "node1");
     operation = suggester.getSuggestion();
     assertEquals("node2", operation.getParams().get("targetNode"));
-    assertEquals("r1", operation.getParams().get("replica"));
+    assertEquals("r5", operation.getParams().get("replica"));
 
     session = suggester.getSession();
     suggester = session.getSuggester(MOVEREPLICA)
@@ -1063,23 +1063,23 @@ public class TestPolicy extends SolrTestCaseJ4 {
 
     operation = suggester.getSuggestion();
     assertNotNull(operation);
-    assertEquals("node2", operation.getParams().get("targetNode"));
-    assertEquals("r3", operation.getParams().get("replica"));
+    assertEquals("node3", operation.getParams().get("targetNode"));
+    assertEquals("r1", operation.getParams().get("replica"));
 
     session = suggester.getSession();
     suggester = session.getSuggester(MOVEREPLICA)
         .hint(Hint.SRC_NODE, "node1");
     operation = suggester.getSuggestion();
     assertNotNull(operation);
-    assertEquals("node2", operation.getParams().get("targetNode"));
-    assertEquals("r5", operation.getParams().get("replica"));
+    assertEquals("node3", operation.getParams().get("targetNode"));
+    assertEquals("r3", operation.getParams().get("replica"));
 
     session = suggester.getSession();
     suggester = session.getSuggester(MOVEREPLICA)
         .hint(Hint.SRC_NODE, "node1");
     operation = suggester.getSuggestion();
-    assertEquals("node3", operation.getParams().get("targetNode"));
-    assertEquals("r1", operation.getParams().get("replica"));
+    assertEquals("node2", operation.getParams().get("targetNode"));
+    assertEquals("r5", operation.getParams().get("replica"));
   }
 
   private static SolrCloudManager cloudManagerWithData(String data) {
@@ -2027,7 +2027,7 @@ public class TestPolicy extends SolrTestCaseJ4 {
     assertEquals("/c/mycoll1", l.get(0)._get( "operation/path",null));
     assertNotNull(l.get(0)._get("operation/command/move-replica", null));
     assertEquals("10.0.0.6:7574_solr", l.get(0)._get( "operation/command/move-replica/targetNode",null));
-    assertEquals("core_node2", l.get(0)._get("operation/command/move-replica/replica", null));
+    assertEquals("core_node1", l.get(0)._get("operation/command/move-replica/replica", null));
   }
 
 
