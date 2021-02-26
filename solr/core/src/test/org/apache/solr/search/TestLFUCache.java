@@ -28,6 +28,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
+import org.apache.lucene.util.LuceneTestCase;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.WildcardQuery;
@@ -51,6 +52,7 @@ import org.slf4j.LoggerFactory;
  * @see org.apache.solr.search.LFUCache
  * @since solr 3.6
  */
+@LuceneTestCase.BadApple(bugUrl = "HOPEFULLY WORKS ON 8.6 BRANCH")
 public class TestLFUCache extends SolrTestCaseJ4 {
 
   private static final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
