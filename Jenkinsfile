@@ -28,8 +28,13 @@ node('docker') {
     }
 
     stage ('Tests') {
+        // NB the solr tests are flakey and take a long time to run
+        // I've opted to skip bad apples (known flakey tests) and the
+        // slow tests to keep things sane for now.  It's better to run
+        // some tests than no tests, but be aware this may compromise
+        // test coverage.
         sh "ant ivy-bootstrap"
-        sh "ant -Dtests.badapples=false test"
+        sh "ant -Dtests.badapples=false -Dtests.slow=false test"
     }
 
     stage ('Build images') {
