@@ -23,6 +23,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -162,14 +163,14 @@ class UpsertCondition {
   }
 
   private static class FieldRule {
-    private static final Pattern RULE_CONDITION_PATTERN = Pattern.compile("^(OLD|NEW)\\.(\\w+):(\\w+)$");
+    private static final Pattern RULE_CONDITION_PATTERN = Pattern.compile("^(OLD|NEW)\\.(\\w+):(\\w+|\\*)$");
 
     private final BooleanClause.Occur occur;
     private final Function<Docs, SolrInputDocument> docGetter;
     private final String field;
-    private final String value;
+    private final ValueRule value;
 
-    private FieldRule(BooleanClause.Occur occur, Function<Docs, SolrInputDocument> docGetter, String field, String value) {
+    private FieldRule(BooleanClause.Occur occur, Function<Docs, SolrInputDocument> docGetter, String field, ValueRule value) {
       this.occur = occur;
       this.docGetter = docGetter;
       this.field = field;
@@ -188,7 +189,13 @@ class UpsertCondition {
         } else {
           docGetter = Docs::getNewDoc;
         }
-        return new FieldRule(occur, docGetter, field, value);
+        ValueRule valueRule;
+        if ("*".equals(value)) {
+          valueRule = Objects::nonNull;
+        } else {
+          valueRule = value::equals;
+        }
+        return new FieldRule(occur, docGetter, field, valueRule);
       }
       throw new SolrException(SERVER_ERROR, "'" + condition + "' not a valid condition for rule");
     }
@@ -199,7 +206,11 @@ class UpsertCondition {
 
     boolean matches(Docs docs) {
       SolrInputDocument doc = docGetter.apply(docs);
-      return value.equals(doc.getFieldValue(field));
+      return value.matches(doc.getFieldValue(field));
     }
+  }
+
+  private interface ValueRule {
+    boolean matches(Object value);
   }
 }
