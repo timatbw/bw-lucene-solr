@@ -92,6 +92,7 @@ public class UpsertConditionTest {
     UpsertCondition condition = UpsertCondition.parse("skip-it", args);
 
     assertThat(condition.isSkip(), is(true));
+    assertThat(condition.isInsert(), is(false));
     assertThat(condition.getName(), is("skip-it"));
 
     SolrInputDocument oldDoc = new SolrInputDocument();
@@ -115,6 +116,7 @@ public class UpsertConditionTest {
     UpsertCondition condition = UpsertCondition.parse("skip-it", args);
 
     assertThat(condition.isSkip(), is(true));
+    assertThat(condition.isInsert(), is(false));
     assertThat(condition.getName(), is("skip-it"));
 
     SolrInputDocument oldDoc = new SolrInputDocument();
@@ -138,6 +140,7 @@ public class UpsertConditionTest {
     UpsertCondition condition = UpsertCondition.parse("skip-it", args);
 
     assertThat(condition.isSkip(), is(true));
+    assertThat(condition.isInsert(), is(false));
     assertThat(condition.getName(), is("skip-it"));
 
     SolrInputDocument oldDoc = new SolrInputDocument();
@@ -161,6 +164,7 @@ public class UpsertConditionTest {
     UpsertCondition condition = UpsertCondition.parse("skip-it", args);
 
     assertThat(condition.isSkip(), is(true));
+    assertThat(condition.isInsert(), is(false));
     assertThat(condition.getName(), is("skip-it"));
 
     SolrInputDocument oldDoc = new SolrInputDocument();
@@ -185,6 +189,7 @@ public class UpsertConditionTest {
     UpsertCondition condition = UpsertCondition.parse("skip-it", args);
 
     assertThat(condition.isSkip(), is(true));
+    assertThat(condition.isInsert(), is(false));
     assertThat(condition.getName(), is("skip-it"));
 
     SolrInputDocument oldDoc = new SolrInputDocument();
@@ -217,6 +222,7 @@ public class UpsertConditionTest {
     UpsertCondition condition = UpsertCondition.parse("skip-it", args);
 
     assertThat(condition.isSkip(), is(true));
+    assertThat(condition.isInsert(), is(false));
     assertThat(condition.getName(), is("skip-it"));
 
     SolrInputDocument oldDoc = new SolrInputDocument();
@@ -252,6 +258,7 @@ public class UpsertConditionTest {
     UpsertCondition condition = UpsertCondition.parse("skip-it", args);
 
     assertThat(condition.isSkip(), is(true));
+    assertThat(condition.isInsert(), is(false));
     assertThat(condition.getName(), is("skip-it"));
 
     SolrInputDocument oldDoc = new SolrInputDocument();
@@ -284,12 +291,55 @@ public class UpsertConditionTest {
     UpsertCondition condition = UpsertCondition.parse("skip-it", args);
 
     assertThat(condition.isSkip(), is(true));
+    assertThat(condition.isInsert(), is(false));
     assertThat(condition.getName(), is("skip-it"));
 
     SolrInputDocument oldDoc = new SolrInputDocument();
     SolrInputDocument newDoc = new SolrInputDocument();
 
     condition.copyOldDocFields(oldDoc, newDoc);
+  }
+
+  @Test(expected = IllegalStateException.class)
+  public void givenInsertAction_whenCopyingOldFields() {
+    NamedList<String> args = new NamedList<>();
+    args.add("should", "OLD.field:value");
+    args.add("action", "insert");
+
+    UpsertCondition condition = UpsertCondition.parse("insert-it", args);
+
+    assertThat(condition.isSkip(), is(false));
+    assertThat(condition.isInsert(), is(true));
+    assertThat(condition.getName(), is("insert-it"));
+
+    SolrInputDocument oldDoc = new SolrInputDocument();
+    SolrInputDocument newDoc = new SolrInputDocument();
+
+    condition.copyOldDocFields(oldDoc, newDoc);
+  }
+
+  @Test
+  public void givenInsert_whenMatching() {
+    NamedList<String> args = new NamedList<>();
+    args.add("must", "OLD.field:value");
+    args.add("action", "insert");
+
+    UpsertCondition condition = UpsertCondition.parse("insert-it", args);
+
+    assertThat(condition.isSkip(), is(false));
+    assertThat(condition.isInsert(), is(true));
+    assertThat(condition.getName(), is("insert-it"));
+
+    SolrInputDocument oldDoc = new SolrInputDocument();
+    SolrInputDocument newDoc = new SolrInputDocument();
+
+    assertFalse(condition.matches(oldDoc, newDoc));
+
+    oldDoc.setField("field", "value");
+    assertTrue(condition.matches(oldDoc, newDoc));
+
+    oldDoc.setField("field", "not-value");
+    assertFalse(condition.matches(oldDoc, newDoc));
   }
 
   @Test
@@ -301,6 +351,7 @@ public class UpsertConditionTest {
     UpsertCondition condition = UpsertCondition.parse("upsert", args);
 
     assertThat(condition.isSkip(), is(false));
+    assertThat(condition.isInsert(), is(false));
     assertThat(condition.getName(), is("upsert"));
 
     SolrInputDocument oldDoc = new SolrInputDocument();
@@ -334,6 +385,7 @@ public class UpsertConditionTest {
     UpsertCondition condition = UpsertCondition.parse("upsert", args);
 
     assertThat(condition.isSkip(), is(false));
+    assertThat(condition.isInsert(), is(false));
     assertThat(condition.getName(), is("upsert"));
 
     SolrInputDocument oldDoc = new SolrInputDocument();
