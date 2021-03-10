@@ -129,6 +129,11 @@ public class ConditionalUpsertProcessorFactory extends UpdateRequestProcessorFac
                 log.info("Condition {} matched - skipping insert", condition.getName());
                 return;
               }
+              if (condition.isInsert()) {
+                log.info("Condition {} matched - will insert", condition.getName());
+                break;
+              }
+
               condition.copyOldDocFields(oldDoc, newDoc);
               break;
             }

@@ -37,39 +37,43 @@ import org.apache.solr.common.util.NamedList;
 import static org.apache.solr.common.SolrException.ErrorCode.SERVER_ERROR;
 
 class UpsertCondition {
-  private static final Pattern ACTION_PATTERN = Pattern.compile("^(skip)|(upsert):(\\*|[\\w,]+)$");
+  private static final Pattern ACTION_PATTERN = Pattern.compile("^(skip|insert)|upsert:(\\*|[\\w,]+)$");
   private static final List<String> ALL_FIELDS = Collections.singletonList("*");
 
   private final String name;
   private final List<FieldRule> rules;
-  private final boolean skip;
+  private final Action action;
   private final List<String> upsertFields;
 
-  UpsertCondition(String name, boolean skip, List<String> upsertFields, List<FieldRule> rules) {
+  UpsertCondition(String name, Action action, List<String> upsertFields, List<FieldRule> rules) {
     this.name = name;
-    this.skip = skip;
+    this.action = action;
     this.upsertFields = upsertFields;
     this.rules = rules;
   }
 
   static UpsertCondition parse(String name, NamedList<String> args) {
     List<FieldRule> rules = new ArrayList<>();
-    boolean skip = false;
+    Action action = null;
     List<String> upsertFields = null;
     for (Map.Entry<String, String> entry: args) {
       String key = entry.getKey();
       if ("action".equals(key)) {
-        String action = entry.getValue();
-        Matcher m = ACTION_PATTERN.matcher(action);
+        String actionValue = entry.getValue();
+        Matcher m = ACTION_PATTERN.matcher(actionValue);
         if (!m.matches()) {
-          throw new SolrException(SERVER_ERROR, "'" + action + "' not a valid action");
+          throw new SolrException(SERVER_ERROR, "'" + actionValue + "' not a valid action");
         }
         if (m.group(1) != null) {
-          skip = true;
+          if ("skip".equals(m.group(1))) {
+            action = Action.SKIP;
+          } else {
+            action = Action.INSERT;
+          }
           upsertFields = null;
         } else {
-          skip = false;
-          String fields = m.group(3);
+          action = Action.UPSERT;
+          String fields = m.group(2);
           upsertFields = Arrays.asList(fields.split(","));
         }
       } else {
@@ -83,13 +87,13 @@ class UpsertCondition {
         rules.add(FieldRule.parse(occur, value));
       }
     }
-    if (!skip && upsertFields == null) {
+    if (action == null) {
       throw new SolrException(SERVER_ERROR, "no action defined for condition: " + name);
     }
     if (rules.isEmpty()) {
       throw new SolrException(SERVER_ERROR, "no rules specified for condition: " + name);
     }
-    return new UpsertCondition(name, skip, upsertFields, rules);
+    return new UpsertCondition(name, action, upsertFields, rules);
   }
 
   String getName() {
@@ -97,12 +101,16 @@ class UpsertCondition {
   }
 
   boolean isSkip() {
-    return skip;
+    return action == Action.SKIP;
+  }
+
+  boolean isInsert() {
+    return action == Action.INSERT;
   }
 
   void copyOldDocFields(SolrInputDocument oldDoc, SolrInputDocument newDoc) {
-    if (skip) {
-      throw new IllegalStateException("Cannot copy old doc fields when skipping");
+    if (action != Action.UPSERT) {
+      throw new IllegalStateException("Can only copy old doc fields when upserting");
     }
     Collection<String> fieldsToCopy;
     if (ALL_FIELDS.equals(upsertFields)) {
@@ -142,6 +150,12 @@ class UpsertCondition {
       }
     }
     return atLeastOneMatched;
+  }
+
+  enum Action {
+    UPSERT,
+    INSERT,
+    SKIP;
   }
 
   private static class Docs {
