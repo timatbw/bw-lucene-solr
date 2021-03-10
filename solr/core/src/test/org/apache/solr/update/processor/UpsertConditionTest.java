@@ -153,6 +153,29 @@ public class UpsertConditionTest {
   }
 
   @Test
+  public void givenSingleShouldAnyValueClause_whenMatching() {
+    NamedList<String> args = new NamedList<>();
+    args.add("should", "OLD.field:*");
+    args.add("action", "skip");
+
+    UpsertCondition condition = UpsertCondition.parse("skip-it", args);
+
+    assertThat(condition.isSkip(), is(true));
+    assertThat(condition.getName(), is("skip-it"));
+
+    SolrInputDocument oldDoc = new SolrInputDocument();
+    SolrInputDocument newDoc = new SolrInputDocument();
+
+    assertFalse(condition.matches(oldDoc, newDoc));
+
+    oldDoc.setField("field", "value");
+    assertTrue(condition.matches(oldDoc, newDoc));
+
+    oldDoc.setField("field", "not-value");
+    assertTrue(condition.matches(oldDoc, newDoc));
+  }
+
+  @Test
   public void givenMultipleMustClauses_whenMatching() {
     NamedList<String> args = new NamedList<>();
     args.add("must", "OLD.field1:value1");
