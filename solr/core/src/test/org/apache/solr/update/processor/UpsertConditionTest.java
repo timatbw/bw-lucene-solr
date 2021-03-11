@@ -1,5 +1,9 @@
 package org.apache.solr.update.processor;
 
+import java.util.Map;
+
+import com.google.common.collect.ImmutableListMultimap;
+import com.google.common.collect.ListMultimap;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrInputDocument;
 import org.apache.solr.common.util.NamedList;
@@ -31,63 +35,67 @@ public class UpsertConditionTest {
 
   @Test(expected = SolrException.class)
   public void givenNoAction_whenParsingCondition() {
-    NamedList<String> args = new NamedList<>();
-    args.add("must", "OLD.field:value");
+    NamedList<String> args = namedList(ImmutableListMultimap.of("must", "OLD.field:value"));
     UpsertCondition.parse("no-action", args);
   }
 
   @Test(expected = SolrException.class)
   public void givenInvalidMatchOccurrence_whenParsingCondition() {
-    NamedList<String> args = new NamedList<>();
-    args.add("maybe_might", "OLD.field:value");
-    args.add("action", "skip");
+    NamedList<String> args = namedList(ImmutableListMultimap.of(
+        "maybe_might", "OLD.field:value",
+        "action", "skip"
+    ));
     UpsertCondition.parse("bad-occurrence", args);
   }
 
   @Test(expected = SolrException.class)
   public void givenNoRules_whenParsingCondition() {
-    NamedList<String> args = new NamedList<>();
-    args.add("action", "skip");
+    NamedList<String> args = namedList(ImmutableListMultimap.of("action", "skip"));
     UpsertCondition.parse("no-rules", args);
   }
 
   @Test(expected = SolrException.class)
   public void givenBadRuleDocPart_whenParsingCondition() {
-    NamedList<String> args = new NamedList<>();
-    args.add("must", "YOUNG.field:value");
-    args.add("action", "skip");
+    NamedList<String> args = namedList(ImmutableListMultimap.of(
+        "must", "YOUNG.field:value",
+        "action", "skip"
+    ));
     UpsertCondition.parse("bad-rule", args);
   }
 
   @Test(expected = SolrException.class)
   public void givenNoDocPart_whenParsingCondition() {
-    NamedList<String> args = new NamedList<>();
-    args.add("must", "field:value");
-    args.add("action", "skip");
+    NamedList<String> args = namedList(ImmutableListMultimap.of(
+        "must", "field:value",
+        "action", "skip"
+    ));
     UpsertCondition.parse("bad-rule", args);
   }
 
   @Test(expected = SolrException.class)
   public void givenNoValuePart_whenParsingCondition() {
-    NamedList<String> args = new NamedList<>();
-    args.add("must", "OLD.field");
-    args.add("action", "skip");
+    NamedList<String> args = namedList(ImmutableListMultimap.of(
+        "must", "OLD.field",
+        "action", "skip"
+    ));
     UpsertCondition.parse("bad-rule", args);
   }
 
   @Test(expected = SolrException.class)
   public void givenBadAction_whenParsingCondition() {
-    NamedList<String> args = new NamedList<>();
-    args.add("must", "OLD.field:value");
-    args.add("action", "skippy");
+    NamedList<String> args = namedList(ImmutableListMultimap.of(
+        "must", "OLD.field:value",
+        "action", "skippy"
+    ));
     UpsertCondition.parse("bad-action", args);
   }
 
   @Test
   public void givenSingleMustClause_whenMatching() {
-    NamedList<String> args = new NamedList<>();
-    args.add("must", "OLD.field:value");
-    args.add("action", "skip");
+    NamedList<String> args = namedList(ImmutableListMultimap.of(
+        "must", "OLD.field:value",
+        "action", "skip"
+    ));
 
     UpsertCondition condition = UpsertCondition.parse("skip-it", args);
 
@@ -109,9 +117,10 @@ public class UpsertConditionTest {
 
   @Test
   public void givenSingleShouldClause_whenMatching() {
-    NamedList<String> args = new NamedList<>();
-    args.add("should", "OLD.field:value");
-    args.add("action", "skip");
+    NamedList<String> args = namedList(ImmutableListMultimap.of(
+        "should", "OLD.field:value",
+        "action", "skip"
+    ));
 
     UpsertCondition condition = UpsertCondition.parse("skip-it", args);
 
@@ -133,9 +142,10 @@ public class UpsertConditionTest {
 
   @Test
   public void givenSingleMustNotClause_whenMatching() {
-    NamedList<String> args = new NamedList<>();
-    args.add("must_not", "OLD.field:value");
-    args.add("action", "skip");
+    NamedList<String> args = namedList(ImmutableListMultimap.of(
+        "must_not", "OLD.field:value",
+        "action", "skip"
+    ));
 
     UpsertCondition condition = UpsertCondition.parse("skip-it", args);
 
@@ -157,9 +167,10 @@ public class UpsertConditionTest {
 
   @Test
   public void givenSingleShouldAnyValueClause_whenMatching() {
-    NamedList<String> args = new NamedList<>();
-    args.add("should", "OLD.field:*");
-    args.add("action", "skip");
+    NamedList<String> args = namedList(ImmutableListMultimap.of(
+        "should", "OLD.field:*",
+        "action", "skip"
+    ));
 
     UpsertCondition condition = UpsertCondition.parse("skip-it", args);
 
@@ -181,10 +192,11 @@ public class UpsertConditionTest {
 
   @Test
   public void givenMultipleMustClauses_whenMatching() {
-    NamedList<String> args = new NamedList<>();
-    args.add("must", "OLD.field1:value1");
-    args.add("must", "NEW.field2:value2");
-    args.add("action", "skip");
+    NamedList<String> args = namedList(ImmutableListMultimap.of(
+        "must", "OLD.field1:value1",
+        "must", "NEW.field2:value2",
+        "action", "skip"
+    ));
 
     UpsertCondition condition = UpsertCondition.parse("skip-it", args);
 
@@ -214,10 +226,11 @@ public class UpsertConditionTest {
 
   @Test
   public void givenMultipleShouldClauses_whenMatching() {
-    NamedList<String> args = new NamedList<>();
-    args.add("should", "OLD.field1:value1");
-    args.add("should", "NEW.field2:value2");
-    args.add("action", "skip");
+    NamedList<String> args = namedList(ImmutableListMultimap.of(
+        "should", "OLD.field1:value1",
+        "should", "NEW.field2:value2",
+        "action", "skip"
+    ));
 
     UpsertCondition condition = UpsertCondition.parse("skip-it", args);
 
@@ -250,10 +263,11 @@ public class UpsertConditionTest {
 
   @Test
   public void givenMustAndMustNotClauses_whenMatching() {
-    NamedList<String> args = new NamedList<>();
-    args.add("must", "OLD.field1:value1");
-    args.add("must_not", "NEW.field2:value2");
-    args.add("action", "skip");
+    NamedList<String> args = namedList(ImmutableListMultimap.of(
+        "must", "OLD.field1:value1",
+        "must_not", "NEW.field2:value2",
+        "action", "skip"
+    ));
 
     UpsertCondition condition = UpsertCondition.parse("skip-it", args);
 
@@ -284,9 +298,10 @@ public class UpsertConditionTest {
 
   @Test(expected = IllegalStateException.class)
   public void givenSkipAction_whenCopyingOldFields() {
-    NamedList<String> args = new NamedList<>();
-    args.add("should", "OLD.field:value");
-    args.add("action", "skip");
+    NamedList<String> args = namedList(ImmutableListMultimap.of(
+        "should", "OLD.field:value",
+        "action", "skip"
+    ));
 
     UpsertCondition condition = UpsertCondition.parse("skip-it", args);
 
@@ -302,9 +317,10 @@ public class UpsertConditionTest {
 
   @Test(expected = IllegalStateException.class)
   public void givenInsertAction_whenCopyingOldFields() {
-    NamedList<String> args = new NamedList<>();
-    args.add("should", "OLD.field:value");
-    args.add("action", "insert");
+    NamedList<String> args = namedList(ImmutableListMultimap.of(
+        "should", "OLD.field:value",
+        "action", "insert"
+    ));
 
     UpsertCondition condition = UpsertCondition.parse("insert-it", args);
 
@@ -320,9 +336,10 @@ public class UpsertConditionTest {
 
   @Test
   public void givenInsert_whenMatching() {
-    NamedList<String> args = new NamedList<>();
-    args.add("must", "OLD.field:value");
-    args.add("action", "insert");
+    NamedList<String> args = namedList(ImmutableListMultimap.of(
+        "must", "OLD.field:value",
+        "action", "insert"
+    ));
 
     UpsertCondition condition = UpsertCondition.parse("insert-it", args);
 
@@ -344,9 +361,10 @@ public class UpsertConditionTest {
 
   @Test
   public void givenUpsertForSpecificFields_whenCopyingOldFields() {
-    NamedList<String> args = new NamedList<>();
-    args.add("must", "OLD.field:value");
-    args.add("action", "upsert:field,other_field");
+    NamedList<String> args = namedList(ImmutableListMultimap.of(
+        "must", "OLD.field:value",
+        "action", "upsert:field,other_field"
+    ));
 
     UpsertCondition condition = UpsertCondition.parse("upsert", args);
 
@@ -378,9 +396,10 @@ public class UpsertConditionTest {
 
   @Test
   public void givenUpsertForAllFields_whenCopyingOldFields() {
-    NamedList<String> args = new NamedList<>();
-    args.add("must", "OLD.field:value");
-    args.add("action", "upsert:*");
+    NamedList<String> args = namedList(ImmutableListMultimap.of(
+        "must", "OLD.field:value",
+        "action", "upsert:*"
+    ));
 
     UpsertCondition condition = UpsertCondition.parse("upsert", args);
 
@@ -409,4 +428,9 @@ public class UpsertConditionTest {
     assertThat(newDoc.getFieldValue("other_field"), is("old-value"));
     assertThat(newDoc.getFieldValue("also-copied"), is("also-copied"));
   }
+
+  private<T> NamedList<T> namedList(ListMultimap<String, T> values) {
+    return new NamedList<>(values.entries().toArray(new Map.Entry[0]));
+  }
+
 }
