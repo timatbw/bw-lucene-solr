@@ -46,15 +46,8 @@ public class ConditionalUpsertProcessorFactory extends UpdateRequestProcessorFac
 
   @Override
   public void init(NamedList args)  {
-    for (Map.Entry<String, ?> entry: (NamedList<?>)args) {
-      String name = entry.getKey();
-      Object tmp = entry.getValue();
-      if (tmp instanceof NamedList) {
-        NamedList<String> condition = (NamedList<String>)tmp;
-        conditions.add(UpsertCondition.parse(name, condition));
-      }
-      // TODO errors etc
-    }
+    conditions.clear();
+    conditions.addAll(UpsertCondition.readConditions(args));
     super.init(args);
   }
 
@@ -116,28 +109,12 @@ public class ConditionalUpsertProcessorFactory extends UpdateRequestProcessorFac
 
     @Override
     public void processAdd(AddUpdateCommand cmd) throws IOException {
-      BytesRef indexedDocId = cmd.getIndexedId();
-
       if (!conditions.isEmpty() && isLeader(cmd)) {
-        SolrInputDocument newDoc = cmd.getSolrInputDocument();
+        BytesRef indexedDocId = cmd.getIndexedId();
         SolrInputDocument oldDoc = RealTimeGetComponent.getInputDocument(core, indexedDocId);
-        if (oldDoc != null) {
-          for (UpsertCondition condition: conditions) {
-            if (condition.matches(oldDoc, newDoc)) {
-              log.info("Condition {} matched, taking action", condition.getName());
-              if (condition.isSkip()) {
-                log.info("Condition {} matched - skipping insert", condition.getName());
-                return;
-              }
-              if (condition.isInsert()) {
-                log.info("Condition {} matched - will insert", condition.getName());
-                break;
-              }
-
-              condition.copyOldDocFields(oldDoc, newDoc);
-              break;
-            }
-          }
+        SolrInputDocument newDoc = cmd.getSolrInputDocument();
+        if (!UpsertCondition.shouldInsertOrUpsert(conditions, oldDoc, newDoc)) {
+          return;
         }
       }
       super.processAdd(cmd);
