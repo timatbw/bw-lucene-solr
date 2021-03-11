@@ -4,12 +4,16 @@ import java.util.Map;
 
 import com.google.common.collect.ImmutableListMultimap;
 import com.google.common.collect.ListMultimap;
+import java.util.List;
+
+import com.google.common.collect.ImmutableMap;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrInputDocument;
 import org.apache.solr.common.util.NamedList;
 import org.junit.Test;
 
 import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -88,6 +92,25 @@ public class UpsertConditionTest {
         "action", "skippy"
     ));
     UpsertCondition.parse("bad-action", args);
+  }
+
+  @Test
+  public void givenNoOldDoc_whenMatching() {
+    NamedList<String> args = new NamedList<>(ImmutableMap.of(
+        "must", "OLD.field:value",
+        "action", "skip"
+    ));
+
+    UpsertCondition condition = UpsertCondition.parse("skip-it", args);
+
+    assertThat(condition.isSkip(), is(true));
+    assertThat(condition.isInsert(), is(false));
+    assertThat(condition.getName(), is("skip-it"));
+
+    SolrInputDocument oldDoc = null;
+    SolrInputDocument newDoc = new SolrInputDocument();
+
+    assertFalse(condition.matches(oldDoc, newDoc));
   }
 
   @Test
@@ -429,8 +452,124 @@ public class UpsertConditionTest {
     assertThat(newDoc.getFieldValue("also-copied"), is("also-copied"));
   }
 
+  @Test
+  public void givenNoOldDoc_whenCheckingShouldInsertOrUpsert() {
+    List<UpsertCondition> conditions = givenMultipleConditions();
+
+    SolrInputDocument oldDoc = null;
+    SolrInputDocument newDoc = new SolrInputDocument();
+
+    assertThat(UpsertCondition.shouldInsertOrUpsert(conditions, oldDoc, newDoc), is(true));
+    assertThat(newDoc.isEmpty(), is(true));
+  }
+
+  @Test
+  public void givenExistingPermanentDelete_whenCheckingShouldInsertOrUpsert() {
+    List<UpsertCondition> conditions = givenMultipleConditions();
+
+    SolrInputDocument oldDoc = new SolrInputDocument();
+    SolrInputDocument newDoc = new SolrInputDocument();
+
+    oldDoc.setField("compliance_reason", "delete");
+
+    assertThat(UpsertCondition.shouldInsertOrUpsert(conditions, oldDoc, newDoc), is(false));
+  }
+
+  @Test
+  public void givenExistingSoftDelete_whenCheckingShouldInsertOrUpsert() {
+    List<UpsertCondition> conditions = givenMultipleConditions();
+
+    SolrInputDocument oldDoc = new SolrInputDocument();
+    SolrInputDocument newDoc = new SolrInputDocument();
+
+    oldDoc.setField("compliance_reason", "soft_delete");
+    oldDoc.setField("old_field", "not-kept-from-old");
+    newDoc.setField("new_field", "kept-from-new");
+
+    assertThat(UpsertCondition.shouldInsertOrUpsert(conditions, oldDoc, newDoc), is(true));
+    assertThat(newDoc.getFieldValue("new_field"), is("kept-from-new"));
+    assertThat(newDoc.getFieldValue("compliance_reason"), is("soft_delete"));
+    assertThat(newDoc.getFieldValue("old_field"), nullValue());
+  }
+
+  @Test
+  public void givenNewSoftDelete_whenCheckingShouldInsertOrUpsert() {
+    List<UpsertCondition> conditions = givenMultipleConditions();
+
+    SolrInputDocument oldDoc = new SolrInputDocument();
+    SolrInputDocument newDoc = new SolrInputDocument();
+
+    oldDoc.setField("old_field1", "kept-from-old1");
+    oldDoc.setField("old_field2", "kept-from-old2");
+    newDoc.setField("compliance_reason", "soft_delete");
+
+    assertThat(UpsertCondition.shouldInsertOrUpsert(conditions, oldDoc, newDoc), is(true));
+    assertThat(newDoc.getFieldValue("old_field1"), is("kept-from-old1"));
+    assertThat(newDoc.getFieldValue("old_field2"), is("kept-from-old2"));
+    assertThat(newDoc.getFieldValue("compliance_reason"), is("soft_delete"));
+  }
+
+  @Test
+  public void givenExistingMetrics_whenCheckingShouldInsertOrUpsert() {
+    List<UpsertCondition> conditions = givenMultipleConditions();
+
+    SolrInputDocument oldDoc = new SolrInputDocument();
+    SolrInputDocument newDoc = new SolrInputDocument();
+
+    oldDoc.setField("metric1", "kept-from-old1");
+    oldDoc.setField("metric2", "kept-from-old2");
+    oldDoc.setField("metric3", "not-kept-from-old");
+
+    assertThat(UpsertCondition.shouldInsertOrUpsert(conditions, oldDoc, newDoc), is(true));
+    assertThat(newDoc.getFieldValue("metric1"), is("kept-from-old1"));
+    assertThat(newDoc.getFieldValue("metric2"), is("kept-from-old2"));
+    assertThat(newDoc.getFieldValue("metric3"), nullValue());
+  }
+
+  @Test
+  public void givenForceInsert_whenCheckingShouldInsertOrUpsert() {
+    List<UpsertCondition> conditions = givenMultipleConditions();
+
+    SolrInputDocument oldDoc = new SolrInputDocument();
+    SolrInputDocument newDoc = new SolrInputDocument();
+
+    oldDoc.setField("compliance_reason", "delete");
+    newDoc.setField("force_insert", "true");
+
+    assertThat(UpsertCondition.shouldInsertOrUpsert(conditions, oldDoc, newDoc), is(true));
+    assertThat(newDoc.getFieldValue("force_insert"), is("true"));
+    assertThat(newDoc.getFieldValue("compliance_reason"), nullValue());
+  }
+
+  private List<UpsertCondition> givenMultipleConditions() {
+    NamedList<?> args = namedList(ImmutableListMultimap.of(
+        "forceInsert", namedList(ImmutableListMultimap.of(
+            "must", "NEW.force_insert:true",
+            "action", "insert"
+        )),
+        "existingPermanentDeletes", namedList(ImmutableListMultimap.of(
+            "must", "OLD.compliance_reason:delete",
+            "action", "skip"
+        )),
+        "existingSoftDeletes", namedList(ImmutableListMultimap.of(
+            "must", "OLD.compliance_reason:soft_delete",
+            "action", "upsert:compliance_reason"
+        )),
+        "newSoftDeletes", namedList(ImmutableListMultimap.of(
+            "must", "NEW.compliance_reason:soft_delete",
+            "action", "upsert:*"
+        )),
+        "existingMetrics", namedList(ImmutableListMultimap.of(
+            "should", "OLD.metric1:*",
+            "should", "OLD.metric2:*",
+            "action", "upsert:metric1,metric2"
+        ))
+    ));
+
+    return UpsertCondition.readConditions(args);
+  }
+
   private<T> NamedList<T> namedList(ListMultimap<String, T> values) {
     return new NamedList<>(values.entries().toArray(new Map.Entry[0]));
   }
-
 }

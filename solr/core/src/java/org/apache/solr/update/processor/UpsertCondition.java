@@ -16,6 +16,7 @@ package org.apache.solr.update.processor;
  * limitations under the License.
  */
 
+import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -33,10 +34,14 @@ import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrInputDocument;
 import org.apache.solr.common.SolrInputField;
 import org.apache.solr.common.util.NamedList;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.apache.solr.common.SolrException.ErrorCode.SERVER_ERROR;
 
 class UpsertCondition {
+  private static final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
+
   private static final Pattern ACTION_PATTERN = Pattern.compile("^(skip|insert)|upsert:(\\*|[\\w,]+)$");
   private static final List<String> ALL_FIELDS = Collections.singletonList("*");
 
@@ -50,6 +55,40 @@ class UpsertCondition {
     this.action = action;
     this.upsertFields = upsertFields;
     this.rules = rules;
+  }
+
+  static List<UpsertCondition> readConditions(NamedList args) {
+    List<UpsertCondition> conditions = new ArrayList<>(args.size());
+    for (Map.Entry<String, ?> entry: (NamedList<?>)args) {
+      String name = entry.getKey();
+      Object tmp = entry.getValue();
+      if (tmp instanceof NamedList) {
+        NamedList<String> condition = (NamedList<String>)tmp;
+        conditions.add(UpsertCondition.parse(name, condition));
+      }
+      // TODO errors etc
+    }
+    return conditions;
+  }
+
+  static boolean shouldInsertOrUpsert(List<UpsertCondition> conditions, SolrInputDocument oldDoc, SolrInputDocument newDoc) {
+    for (UpsertCondition condition: conditions) {
+      if (condition.matches(oldDoc, newDoc)) {
+        log.info("Condition {} matched, taking action", condition.getName());
+        if (condition.isSkip()) {
+          log.info("Condition {} matched - skipping insert", condition.getName());
+          return false;
+        }
+        if (condition.isInsert()) {
+          log.info("Condition {} matched - will insert", condition.getName());
+          break;
+        }
+
+        condition.copyOldDocFields(oldDoc, newDoc);
+        break;
+      }
+    }
+    return true;
   }
 
   static UpsertCondition parse(String name, NamedList<String> args) {
@@ -220,7 +259,7 @@ class UpsertCondition {
 
     boolean matches(Docs docs) {
       SolrInputDocument doc = docGetter.apply(docs);
-      return value.matches(doc.getFieldValue(field));
+      return doc != null && value.matches(doc.getFieldValue(field));
     }
   }
 
