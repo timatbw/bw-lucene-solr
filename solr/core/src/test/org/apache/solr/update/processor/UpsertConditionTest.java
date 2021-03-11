@@ -214,6 +214,30 @@ public class UpsertConditionTest {
   }
 
   @Test
+  public void givenSingleShouldDocExistsClause_whenMatching() {
+    NamedList<String> args = namedList(ImmutableListMultimap.of(
+        "should", "OLD.*",
+        "action", "skip"
+    ));
+
+    UpsertCondition condition = UpsertCondition.parse("skip-it", args);
+
+    assertThat(condition.isSkip(), is(true));
+    assertThat(condition.isInsert(), is(false));
+    assertThat(condition.getName(), is("skip-it"));
+
+    SolrInputDocument oldDoc = new SolrInputDocument();
+    SolrInputDocument newDoc = new SolrInputDocument();
+
+    assertFalse(condition.matches(null, newDoc));
+
+    assertTrue(condition.matches(oldDoc, newDoc));
+
+    oldDoc.setField("field", "value");
+    assertTrue(condition.matches(oldDoc, newDoc));
+  }
+
+  @Test
   public void givenMultipleMustClauses_whenMatching() {
     NamedList<String> args = namedList(ImmutableListMultimap.of(
         "must", "OLD.field1:value1",
@@ -453,17 +477,6 @@ public class UpsertConditionTest {
   }
 
   @Test
-  public void givenNoOldDoc_whenCheckingShouldInsertOrUpsert() {
-    List<UpsertCondition> conditions = givenMultipleConditions();
-
-    SolrInputDocument oldDoc = null;
-    SolrInputDocument newDoc = new SolrInputDocument();
-
-    assertThat(UpsertCondition.shouldInsertOrUpsert(conditions, oldDoc, newDoc), is(true));
-    assertThat(newDoc.isEmpty(), is(true));
-  }
-
-  @Test
   public void givenExistingPermanentDelete_whenCheckingShouldInsertOrUpsert() {
     List<UpsertCondition> conditions = givenMultipleConditions();
 
@@ -541,30 +554,59 @@ public class UpsertConditionTest {
     assertThat(newDoc.getFieldValue("compliance_reason"), nullValue());
   }
 
+  @Test
+  public void givenSkipIfNotExists_whenCheckingShouldInsertOrUpsert() {
+    List<UpsertCondition> conditions = givenMultipleConditions();
+
+    SolrInputDocument newDoc = new SolrInputDocument();
+
+    assertThat(UpsertCondition.shouldInsertOrUpsert(conditions, null, newDoc), is(false));
+    assertThat(newDoc.isEmpty(), is(true));
+
+    newDoc.setField("date", "today");
+
+    assertThat(UpsertCondition.shouldInsertOrUpsert(conditions, null, newDoc), is(true));
+    assertThat(newDoc.getFieldValue("date"), is("today"));
+  }
+
+  @Test(expected = SolrException.class)
+  public void givenInvalidConfig_whenReadingConditions() {
+    NamedList<Object> args = new NamedList<>();
+    args.add("something", "else");
+
+    UpsertCondition.readConditions(args);
+  }
+
   private List<UpsertCondition> givenMultipleConditions() {
-    NamedList<?> args = namedList(ImmutableListMultimap.of(
-        "forceInsert", namedList(ImmutableListMultimap.of(
+    NamedList<?> args = namedList(ImmutableListMultimap.<String, NamedList<String>>builder()
+        .put("forceInsert", namedList(ImmutableListMultimap.of(
             "must", "NEW.force_insert:true",
             "action", "insert"
-        )),
-        "existingPermanentDeletes", namedList(ImmutableListMultimap.of(
+        )))
+        .put("existingPermanentDeletes", namedList(ImmutableListMultimap.of(
             "must", "OLD.compliance_reason:delete",
             "action", "skip"
-        )),
-        "existingSoftDeletes", namedList(ImmutableListMultimap.of(
+        )))
+        .put("existingSoftDeletes", namedList(ImmutableListMultimap.of(
             "must", "OLD.compliance_reason:soft_delete",
             "action", "upsert:compliance_reason"
-        )),
-        "newSoftDeletes", namedList(ImmutableListMultimap.of(
+        )))
+        .put("newSoftDeletes", namedList(ImmutableListMultimap.of(
             "must", "NEW.compliance_reason:soft_delete",
             "action", "upsert:*"
-        )),
-        "existingMetrics", namedList(ImmutableListMultimap.of(
+        )))
+        .put("existingMetrics", namedList(ImmutableListMultimap.of(
             "should", "OLD.metric1:*",
             "should", "OLD.metric2:*",
             "action", "upsert:metric1,metric2"
-        ))
-    ));
+        )))
+        .put("skipIfNotExists", namedList(ImmutableListMultimap.of(
+            "must_not", "OLD.*",
+            "must_not", "NEW.date:*",
+            "action", "skip"
+        )))
+        .build()
+    );
 
     return UpsertCondition.readConditions(args);
   }
