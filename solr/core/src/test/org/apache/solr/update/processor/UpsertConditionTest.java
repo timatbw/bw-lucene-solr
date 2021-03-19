@@ -114,6 +114,34 @@ public class UpsertConditionTest {
   }
 
   @Test
+  public void givenMultiValuedField_whenMatching() {
+    NamedList<String> args = new NamedList<>(ImmutableMap.of(
+        "must", "OLD.field:value",
+        "action", "skip"
+    ));
+
+    UpsertCondition condition = UpsertCondition.parse("skip-it", args);
+
+    assertThat(condition.isSkip(), is(true));
+    assertThat(condition.isInsert(), is(false));
+    assertThat(condition.getName(), is("skip-it"));
+
+    SolrInputDocument oldDoc = new SolrInputDocument();
+    SolrInputDocument newDoc = new SolrInputDocument();
+
+    assertFalse(condition.matches(oldDoc, newDoc));
+
+    oldDoc.addField("field", "other1");
+    assertFalse(condition.matches(oldDoc, newDoc));
+
+    oldDoc.addField("field", "value");
+    assertTrue(condition.matches(oldDoc, newDoc));
+
+    oldDoc.addField("field", "other2");
+    assertTrue(condition.matches(oldDoc, newDoc));
+  }
+
+  @Test
   public void givenSingleMustClause_whenMatching() {
     NamedList<String> args = namedList(ImmutableListMultimap.of(
         "must", "OLD.field:value",
