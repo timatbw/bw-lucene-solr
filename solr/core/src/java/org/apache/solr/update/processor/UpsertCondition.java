@@ -270,7 +270,15 @@ class UpsertCondition {
     }
 
     private static Predicate<SolrInputDocument> forField(String field, Predicate<Object> fieldPredicate) {
-      return doc -> doc != null && fieldPredicate.test(doc.getFieldValue(field));
+      return doc -> {
+        if (doc != null) {
+          Collection<Object> values = doc.getFieldValues(field);
+          if (values != null) {
+            return values.stream().anyMatch(fieldPredicate);
+          }
+        }
+        return false;
+      };
     }
   }
 }
