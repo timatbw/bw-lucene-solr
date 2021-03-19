@@ -43,7 +43,7 @@ import static org.apache.solr.common.SolrException.ErrorCode.SERVER_ERROR;
 class UpsertCondition {
   private static final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 
-  private static final Pattern ACTION_PATTERN = Pattern.compile("^(skip|insert)|upsert:(\\*|[\\w,]+)$");
+  private static final Pattern ACTION_PATTERN = Pattern.compile("^(skip|insert)|(upsert|retain):(\\*|[\\w,]+)$");
   private static final List<String> ALL_FIELDS = Collections.singletonList("*");
 
   private final String name;
@@ -113,8 +113,12 @@ class UpsertCondition {
           }
           upsertFields = null;
         } else {
-          action = Action.UPSERT;
-          String fields = m.group(2);
+          if ("upsert".equals(m.group(2))) {
+            action = Action.UPSERT;
+          } else {
+            action = Action.RETAIN;
+          }
+          String fields = m.group(3);
           upsertFields = Arrays.asList(fields.split(","));
         }
       } else {
@@ -150,8 +154,8 @@ class UpsertCondition {
   }
 
   void copyOldDocFields(SolrInputDocument oldDoc, SolrInputDocument newDoc) {
-    if (action != Action.UPSERT) {
-      throw new IllegalStateException("Can only copy old doc fields when upserting");
+    if (action != Action.UPSERT && action != Action.RETAIN) {
+      throw new IllegalStateException("Can only copy old doc fields when upserting or retaining");
     }
     Collection<String> fieldsToCopy;
     if (ALL_FIELDS.equals(upsertFields)) {
@@ -160,7 +164,7 @@ class UpsertCondition {
       fieldsToCopy = upsertFields;
     }
     fieldsToCopy.forEach(field -> {
-      if (!newDoc.containsKey(field)) {
+      if (action == Action.RETAIN || !newDoc.containsKey(field)) {
         SolrInputField inputField = oldDoc.getField(field);
         newDoc.put(field, inputField);
       }
@@ -194,9 +198,10 @@ class UpsertCondition {
   }
 
   enum Action {
-    UPSERT,
-    INSERT,
-    SKIP;
+    UPSERT, // copy some/all fields from the OLD doc (when they don't exist on the new doc)
+    RETAIN, // copy some/all fields from the OLD doc always
+    INSERT, // just do a regular insert as normal
+    SKIP;   // entirely skip inserting the doc
   }
 
   private static class Docs {

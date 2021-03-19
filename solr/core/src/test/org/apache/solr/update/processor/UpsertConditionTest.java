@@ -495,6 +495,41 @@ public class UpsertConditionTest {
   }
 
   @Test
+  public void givenRetainForSpecificFields_whenCopyingOldFields() {
+    NamedList<String> args = namedList(ImmutableListMultimap.of(
+        "must", "OLD.field:value",
+        "action", "retain:field,other_field"
+    ));
+
+    UpsertCondition condition = UpsertCondition.parse("retain", args);
+
+    assertThat(condition.isSkip(), is(false));
+    assertThat(condition.isInsert(), is(false));
+    assertThat(condition.getName(), is("retain"));
+
+    SolrInputDocument oldDoc = new SolrInputDocument();
+    SolrInputDocument newDoc = new SolrInputDocument();
+    oldDoc.setField("field", "old-value1");
+    oldDoc.setField("other_field", "old-value2");
+    oldDoc.setField("not-copied", "not-copied");
+
+    condition.copyOldDocFields(oldDoc, newDoc);
+
+    assertThat(newDoc.getFieldValue("field"), is("old-value1"));
+    assertThat(newDoc.getFieldValue("other_field"), is("old-value2"));
+    assertFalse(newDoc.containsKey("not-copied"));
+
+    newDoc = new SolrInputDocument();
+    newDoc.setField("field", "should-be-overridden");
+
+    condition.copyOldDocFields(oldDoc, newDoc);
+
+    assertThat(newDoc.getFieldValue("field"), is("old-value1"));
+    assertThat(newDoc.getFieldValue("other_field"), is("old-value2"));
+    assertFalse(newDoc.containsKey("not-copied"));
+  }
+
+  @Test
   public void givenUpsertForAllFields_whenCopyingOldFields() {
     NamedList<String> args = namedList(ImmutableListMultimap.of(
         "must", "OLD.field:value",
