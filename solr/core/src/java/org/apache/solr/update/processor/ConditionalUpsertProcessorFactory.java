@@ -42,6 +42,8 @@ import static org.apache.solr.update.processor.DistributingUpdateProcessorFactor
 public class ConditionalUpsertProcessorFactory extends UpdateRequestProcessorFactory implements SolrCoreAware, UpdateRequestProcessorFactory.RunAlways {
   private static final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 
+  private static final String PARAM_IGNORE_CONDITIONAL_UPSERTS = "ignoreConditionalUpserts";
+
   private final List<UpsertCondition> conditions = new ArrayList<>();
 
   @Override
@@ -55,7 +57,14 @@ public class ConditionalUpsertProcessorFactory extends UpdateRequestProcessorFac
   public ConditionalUpsertUpdateProcessor getInstance(SolrQueryRequest req,
                                                       SolrQueryResponse rsp,
                                                       UpdateRequestProcessor next) {
-    return new ConditionalUpsertUpdateProcessor(req, next, conditions);
+    // Ensure the parameters are forwarded to the leader
+    DistributedUpdateProcessorFactory.addParamToDistributedRequestWhitelist(req, PARAM_IGNORE_CONDITIONAL_UPSERTS);
+
+    // there may be cases where we want to revert to "regular" behaviour without the conditional
+    // upsert logic interfering
+    boolean ignoreConditionalUpserts = req.getOriginalParams().getBool(PARAM_IGNORE_CONDITIONAL_UPSERTS, false);
+
+    return new ConditionalUpsertUpdateProcessor(req, next, conditions, ignoreConditionalUpserts);
   }
 
   @Override
@@ -75,13 +84,16 @@ public class ConditionalUpsertProcessorFactory extends UpdateRequestProcessorFac
     private DistributedUpdateProcessor distribProc;  // the distributed update processor following us
     private DistributedUpdateProcessor.DistribPhase phase;
     private final List<UpsertCondition> conditions;
+    private final boolean ignoreConditionalUpserts;
 
     ConditionalUpsertUpdateProcessor(SolrQueryRequest req,
                                      UpdateRequestProcessor next,
-                                     List<UpsertCondition> conditions) {
+                                     List<UpsertCondition> conditions,
+                                     boolean ignoreConditionalUpserts) {
       super(next);
       this.core = req.getCore();
       this.conditions = conditions;
+      this.ignoreConditionalUpserts = ignoreConditionalUpserts;
 
       for (UpdateRequestProcessor proc = next ;proc != null; proc = proc.next) {
         if (proc instanceof DistributedUpdateProcessor) {
@@ -109,7 +121,7 @@ public class ConditionalUpsertProcessorFactory extends UpdateRequestProcessorFac
 
     @Override
     public void processAdd(AddUpdateCommand cmd) throws IOException {
-      if (!conditions.isEmpty() && isLeader(cmd)) {
+      if (!ignoreConditionalUpserts && !conditions.isEmpty() && isLeader(cmd)) {
         BytesRef indexedDocId = cmd.getIndexedId();
         SolrInputDocument oldDoc = RealTimeGetComponent.getInputDocument(core, indexedDocId);
         SolrInputDocument newDoc = cmd.getSolrInputDocument();
