@@ -142,6 +142,31 @@ public class UpsertConditionTest {
   }
 
   @Test
+  public void givenNumericField_whenMatching() {
+    NamedList<String> args = new NamedList<>(ImmutableMap.of(
+        "must", "OLD.field:123",
+        "action", "skip"
+    ));
+
+    UpsertCondition condition = UpsertCondition.parse("skip-it", args);
+
+    assertThat(condition.isSkip(), is(true));
+    assertThat(condition.isInsert(), is(false));
+    assertThat(condition.getName(), is("skip-it"));
+
+    SolrInputDocument oldDoc = new SolrInputDocument();
+    SolrInputDocument newDoc = new SolrInputDocument();
+
+    assertFalse(condition.matches(oldDoc, newDoc));
+
+    oldDoc.setField("field", 999);
+    assertFalse(condition.matches(oldDoc, newDoc));
+
+    oldDoc.setField("field", 123);
+    assertTrue(condition.matches(oldDoc, newDoc));
+  }
+
+  @Test
   public void givenSingleMustClause_whenMatching() {
     NamedList<String> args = namedList(ImmutableListMultimap.of(
         "must", "OLD.field:value",

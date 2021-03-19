@@ -252,7 +252,7 @@ class UpsertCondition {
           if ("*".equals(value)) {
             docPredicate = forField(field, Objects::nonNull);
           } else {
-            docPredicate = forField(field, value::equals);
+            docPredicate = forField(field, stringlyEquals(value));
           }
         }
         return new FieldRule(occur, docGetter, docPredicate);
@@ -267,6 +267,18 @@ class UpsertCondition {
     boolean matches(Docs docs) {
       SolrInputDocument doc = docGetter.apply(docs);
       return docPredicate.test(doc);
+    }
+
+    private static Predicate<Object> stringlyEquals(String value) {
+      return fieldValue -> {
+        if (fieldValue == null) {
+          return false;
+        }
+        if (!(fieldValue instanceof String)) {
+          return value.equals(fieldValue.toString());
+        }
+        return value.equals(fieldValue);
+      };
     }
 
     private static Predicate<SolrInputDocument> forField(String field, Predicate<Object> fieldPredicate) {
