@@ -76,13 +76,13 @@ class UpsertCondition {
   static boolean shouldInsertOrUpsert(List<UpsertCondition> conditions, SolrInputDocument oldDoc, SolrInputDocument newDoc) {
     for (UpsertCondition condition: conditions) {
       if (condition.matches(oldDoc, newDoc)) {
-        log.info("Condition {} matched, taking action", condition.getName());
+        log.debug("Condition {} matched, taking action", condition.getName());
         if (condition.isSkip()) {
-          log.info("Condition {} matched - skipping insert", condition.getName());
+          log.debug("Condition {} matched - skipping insert", condition.getName());
           return false;
         }
         if (condition.isInsert()) {
-          log.info("Condition {} matched - will insert", condition.getName());
+          log.debug("Condition {} matched - will insert", condition.getName());
           break;
         }
 
