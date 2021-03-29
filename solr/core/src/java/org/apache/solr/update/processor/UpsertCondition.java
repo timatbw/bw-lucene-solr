@@ -43,7 +43,7 @@ import static org.apache.solr.common.SolrException.ErrorCode.SERVER_ERROR;
 class UpsertCondition {
   private static final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 
-  private static final Pattern ACTION_PATTERN = Pattern.compile("^(skip|insert)|(upsert|retain):(\\*|[\\w,]+)$");
+  private static final Pattern ACTION_PATTERN = Pattern.compile("^(skip|insert)|(upsert|retain):(\\*|[\\w,]+)|(nullify):([\\w,]+)$");
   private static final List<String> ALL_FIELDS = Collections.singletonList("*");
 
   private final String name;
@@ -162,6 +162,7 @@ class UpsertCondition {
   enum ActionType {
     UPSERT, // copy some/all fields from the OLD doc (when they don't exist on the new doc)
     RETAIN, // copy some/all fields from the OLD doc always
+    NULLIFY, // make sure specific fields are null before doc written
     INSERT, // just do a regular insert as normal
     SKIP;   // entirely skip inserting the doc
   }
@@ -284,13 +285,17 @@ class UpsertCondition {
           type = ActionType.INSERT;
         }
         fields = null;
-      } else {
+      } else if (m.group(2) != null) {
         if ("upsert".equals(m.group(2))) {
           type = ActionType.UPSERT;
         } else {
           type = ActionType.RETAIN;
         }
         String fieldsConfig = m.group(3);
+        fields = Arrays.asList(fieldsConfig.split(","));
+      } else {
+        type = ActionType.NULLIFY;
+        String fieldsConfig = m.group(5);
         fields = Arrays.asList(fieldsConfig.split(","));
       }
       return new Action(type, fields);
@@ -309,6 +314,10 @@ class UpsertCondition {
             SolrInputField inputField = oldDoc.getField(field);
             newDoc.put(field, inputField);
           }
+        });
+      } else if (type == ActionType.NULLIFY) {
+        fields.forEach(field -> {
+          newDoc.setField(field, null);
         });
       }
     }
