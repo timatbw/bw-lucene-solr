@@ -1,18 +1,18 @@
 package org.apache.solr.update.processor;
 
+import java.util.List;
 import java.util.Map;
 
 import com.google.common.collect.ImmutableListMultimap;
-import com.google.common.collect.ListMultimap;
-import java.util.List;
-
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ListMultimap;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrInputDocument;
 import org.apache.solr.common.util.NamedList;
 import org.junit.Test;
 
 import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.CoreMatchers.notNullValue;
 import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.assertFalse;
@@ -94,6 +94,15 @@ public class UpsertConditionTest {
     UpsertCondition.parse("bad-action", args);
   }
 
+  @Test(expected = SolrException.class)
+  public void givenBadUpsert_whenParsingCondition() {
+    NamedList<String> args = namedList(ImmutableListMultimap.of(
+        "must", "OLD.field:value",
+        "action", "upsert:%^&"
+    ));
+    UpsertCondition.parse("bad-action", args);
+  }
+
   @Test
   public void givenNoOldDoc_whenMatching() {
     NamedList<String> args = new NamedList<>(ImmutableMap.of(
@@ -103,8 +112,6 @@ public class UpsertConditionTest {
 
     UpsertCondition condition = UpsertCondition.parse("skip-it", args);
 
-    assertThat(condition.isSkip(), is(true));
-    assertThat(condition.isInsert(), is(false));
     assertThat(condition.getName(), is("skip-it"));
 
     SolrInputDocument oldDoc = null;
@@ -122,8 +129,6 @@ public class UpsertConditionTest {
 
     UpsertCondition condition = UpsertCondition.parse("skip-it", args);
 
-    assertThat(condition.isSkip(), is(true));
-    assertThat(condition.isInsert(), is(false));
     assertThat(condition.getName(), is("skip-it"));
 
     SolrInputDocument oldDoc = new SolrInputDocument();
@@ -150,8 +155,6 @@ public class UpsertConditionTest {
 
     UpsertCondition condition = UpsertCondition.parse("skip-it", args);
 
-    assertThat(condition.isSkip(), is(true));
-    assertThat(condition.isInsert(), is(false));
     assertThat(condition.getName(), is("skip-it"));
 
     SolrInputDocument oldDoc = new SolrInputDocument();
@@ -175,8 +178,6 @@ public class UpsertConditionTest {
 
     UpsertCondition condition = UpsertCondition.parse("skip-it", args);
 
-    assertThat(condition.isSkip(), is(true));
-    assertThat(condition.isInsert(), is(false));
     assertThat(condition.getName(), is("skip-it"));
 
     SolrInputDocument oldDoc = new SolrInputDocument();
@@ -200,8 +201,6 @@ public class UpsertConditionTest {
 
     UpsertCondition condition = UpsertCondition.parse("skip-it", args);
 
-    assertThat(condition.isSkip(), is(true));
-    assertThat(condition.isInsert(), is(false));
     assertThat(condition.getName(), is("skip-it"));
 
     SolrInputDocument oldDoc = new SolrInputDocument();
@@ -225,8 +224,6 @@ public class UpsertConditionTest {
 
     UpsertCondition condition = UpsertCondition.parse("skip-it", args);
 
-    assertThat(condition.isSkip(), is(true));
-    assertThat(condition.isInsert(), is(false));
     assertThat(condition.getName(), is("skip-it"));
 
     SolrInputDocument oldDoc = new SolrInputDocument();
@@ -250,8 +247,6 @@ public class UpsertConditionTest {
 
     UpsertCondition condition = UpsertCondition.parse("skip-it", args);
 
-    assertThat(condition.isSkip(), is(true));
-    assertThat(condition.isInsert(), is(false));
     assertThat(condition.getName(), is("skip-it"));
 
     SolrInputDocument oldDoc = new SolrInputDocument();
@@ -275,8 +270,6 @@ public class UpsertConditionTest {
 
     UpsertCondition condition = UpsertCondition.parse("skip-it", args);
 
-    assertThat(condition.isSkip(), is(true));
-    assertThat(condition.isInsert(), is(false));
     assertThat(condition.getName(), is("skip-it"));
 
     SolrInputDocument oldDoc = new SolrInputDocument();
@@ -300,8 +293,6 @@ public class UpsertConditionTest {
 
     UpsertCondition condition = UpsertCondition.parse("skip-it", args);
 
-    assertThat(condition.isSkip(), is(true));
-    assertThat(condition.isInsert(), is(false));
     assertThat(condition.getName(), is("skip-it"));
 
     SolrInputDocument oldDoc = new SolrInputDocument();
@@ -334,8 +325,6 @@ public class UpsertConditionTest {
 
     UpsertCondition condition = UpsertCondition.parse("skip-it", args);
 
-    assertThat(condition.isSkip(), is(true));
-    assertThat(condition.isInsert(), is(false));
     assertThat(condition.getName(), is("skip-it"));
 
     SolrInputDocument oldDoc = new SolrInputDocument();
@@ -371,8 +360,6 @@ public class UpsertConditionTest {
 
     UpsertCondition condition = UpsertCondition.parse("skip-it", args);
 
-    assertThat(condition.isSkip(), is(true));
-    assertThat(condition.isInsert(), is(false));
     assertThat(condition.getName(), is("skip-it"));
 
     SolrInputDocument oldDoc = new SolrInputDocument();
@@ -396,8 +383,8 @@ public class UpsertConditionTest {
     assertTrue(condition.matches(oldDoc, newDoc));
   }
 
-  @Test(expected = IllegalStateException.class)
-  public void givenSkipAction_whenCopyingOldFields() {
+  @Test
+  public void givenSkipAction_whenRunning() {
     NamedList<String> args = namedList(ImmutableListMultimap.of(
         "should", "OLD.field:value",
         "action", "skip"
@@ -405,18 +392,18 @@ public class UpsertConditionTest {
 
     UpsertCondition condition = UpsertCondition.parse("skip-it", args);
 
-    assertThat(condition.isSkip(), is(true));
-    assertThat(condition.isInsert(), is(false));
     assertThat(condition.getName(), is("skip-it"));
 
     SolrInputDocument oldDoc = new SolrInputDocument();
     SolrInputDocument newDoc = new SolrInputDocument();
 
-    condition.copyOldDocFields(oldDoc, newDoc);
+    assertThat(condition.run(oldDoc, newDoc), is(UpsertCondition.ActionType.SKIP));
+    assertThat(oldDoc.isEmpty(), is(true));
+    assertThat(newDoc.isEmpty(), is(true));
   }
 
-  @Test(expected = IllegalStateException.class)
-  public void givenInsertAction_whenCopyingOldFields() {
+  @Test
+  public void givenInsertAction_whenRunning() {
     NamedList<String> args = namedList(ImmutableListMultimap.of(
         "should", "OLD.field:value",
         "action", "insert"
@@ -424,43 +411,18 @@ public class UpsertConditionTest {
 
     UpsertCondition condition = UpsertCondition.parse("insert-it", args);
 
-    assertThat(condition.isSkip(), is(false));
-    assertThat(condition.isInsert(), is(true));
     assertThat(condition.getName(), is("insert-it"));
 
     SolrInputDocument oldDoc = new SolrInputDocument();
     SolrInputDocument newDoc = new SolrInputDocument();
 
-    condition.copyOldDocFields(oldDoc, newDoc);
+    assertThat(condition.run(oldDoc, newDoc), is(UpsertCondition.ActionType.INSERT));
+    assertThat(oldDoc.isEmpty(), is(true));
+    assertThat(newDoc.isEmpty(), is(true));
   }
 
   @Test
-  public void givenInsert_whenMatching() {
-    NamedList<String> args = namedList(ImmutableListMultimap.of(
-        "must", "OLD.field:value",
-        "action", "insert"
-    ));
-
-    UpsertCondition condition = UpsertCondition.parse("insert-it", args);
-
-    assertThat(condition.isSkip(), is(false));
-    assertThat(condition.isInsert(), is(true));
-    assertThat(condition.getName(), is("insert-it"));
-
-    SolrInputDocument oldDoc = new SolrInputDocument();
-    SolrInputDocument newDoc = new SolrInputDocument();
-
-    assertFalse(condition.matches(oldDoc, newDoc));
-
-    oldDoc.setField("field", "value");
-    assertTrue(condition.matches(oldDoc, newDoc));
-
-    oldDoc.setField("field", "not-value");
-    assertFalse(condition.matches(oldDoc, newDoc));
-  }
-
-  @Test
-  public void givenUpsertForSpecificFields_whenCopyingOldFields() {
+  public void givenUpsertForSpecificFields_whenRunning() {
     NamedList<String> args = namedList(ImmutableListMultimap.of(
         "must", "OLD.field:value",
         "action", "upsert:field,other_field"
@@ -468,8 +430,6 @@ public class UpsertConditionTest {
 
     UpsertCondition condition = UpsertCondition.parse("upsert", args);
 
-    assertThat(condition.isSkip(), is(false));
-    assertThat(condition.isInsert(), is(false));
     assertThat(condition.getName(), is("upsert"));
 
     SolrInputDocument oldDoc = new SolrInputDocument();
@@ -478,7 +438,7 @@ public class UpsertConditionTest {
     oldDoc.setField("other_field", "old-value");
     oldDoc.setField("not-copied", "not-copied");
 
-    condition.copyOldDocFields(oldDoc, newDoc);
+    assertThat(condition.run(oldDoc, newDoc), is(UpsertCondition.ActionType.UPSERT));
 
     assertThat(newDoc.getFieldValue("field"), is("value"));
     assertThat(newDoc.getFieldValue("other_field"), is("old-value"));
@@ -487,7 +447,7 @@ public class UpsertConditionTest {
     newDoc = new SolrInputDocument();
     newDoc.setField("field", "left-alone");
 
-    condition.copyOldDocFields(oldDoc, newDoc);
+    assertThat(condition.run(oldDoc, newDoc), is(UpsertCondition.ActionType.UPSERT));
 
     assertThat(newDoc.getFieldValue("field"), is("left-alone"));
     assertThat(newDoc.getFieldValue("other_field"), is("old-value"));
@@ -495,7 +455,7 @@ public class UpsertConditionTest {
   }
 
   @Test
-  public void givenRetainForSpecificFields_whenCopyingOldFields() {
+  public void givenRetainForSpecificFields_whenRunning() {
     NamedList<String> args = namedList(ImmutableListMultimap.of(
         "must", "OLD.field:value",
         "action", "retain:field,other_field"
@@ -503,8 +463,6 @@ public class UpsertConditionTest {
 
     UpsertCondition condition = UpsertCondition.parse("retain", args);
 
-    assertThat(condition.isSkip(), is(false));
-    assertThat(condition.isInsert(), is(false));
     assertThat(condition.getName(), is("retain"));
 
     SolrInputDocument oldDoc = new SolrInputDocument();
@@ -513,7 +471,7 @@ public class UpsertConditionTest {
     oldDoc.setField("other_field", "old-value2");
     oldDoc.setField("not-copied", "not-copied");
 
-    condition.copyOldDocFields(oldDoc, newDoc);
+    assertThat(condition.run(oldDoc, newDoc), is(UpsertCondition.ActionType.RETAIN));
 
     assertThat(newDoc.getFieldValue("field"), is("old-value1"));
     assertThat(newDoc.getFieldValue("other_field"), is("old-value2"));
@@ -522,7 +480,7 @@ public class UpsertConditionTest {
     newDoc = new SolrInputDocument();
     newDoc.setField("field", "should-be-overridden");
 
-    condition.copyOldDocFields(oldDoc, newDoc);
+    assertThat(condition.run(oldDoc, newDoc), is(UpsertCondition.ActionType.RETAIN));
 
     assertThat(newDoc.getFieldValue("field"), is("old-value1"));
     assertThat(newDoc.getFieldValue("other_field"), is("old-value2"));
@@ -530,7 +488,7 @@ public class UpsertConditionTest {
   }
 
   @Test
-  public void givenUpsertForAllFields_whenCopyingOldFields() {
+  public void givenUpsertForAllFields_whenRunning() {
     NamedList<String> args = namedList(ImmutableListMultimap.of(
         "must", "OLD.field:value",
         "action", "upsert:*"
@@ -538,8 +496,6 @@ public class UpsertConditionTest {
 
     UpsertCondition condition = UpsertCondition.parse("upsert", args);
 
-    assertThat(condition.isSkip(), is(false));
-    assertThat(condition.isInsert(), is(false));
     assertThat(condition.getName(), is("upsert"));
 
     SolrInputDocument oldDoc = new SolrInputDocument();
@@ -548,7 +504,7 @@ public class UpsertConditionTest {
     oldDoc.setField("other_field", "old-value");
     oldDoc.setField("also-copied", "also-copied");
 
-    condition.copyOldDocFields(oldDoc, newDoc);
+    assertThat(condition.run(oldDoc, newDoc), is(UpsertCondition.ActionType.UPSERT));
 
     assertThat(newDoc.getFieldValue("field"), is("value"));
     assertThat(newDoc.getFieldValue("other_field"), is("old-value"));
@@ -557,7 +513,7 @@ public class UpsertConditionTest {
     newDoc = new SolrInputDocument();
     newDoc.setField("field", "left-alone");
 
-    condition.copyOldDocFields(oldDoc, newDoc);
+    assertThat(condition.run(oldDoc, newDoc), is(UpsertCondition.ActionType.UPSERT));
 
     assertThat(newDoc.getFieldValue("field"), is("left-alone"));
     assertThat(newDoc.getFieldValue("other_field"), is("old-value"));
@@ -628,6 +584,26 @@ public class UpsertConditionTest {
   }
 
   @Test
+  public void givenExistingSoftDeleteAndMetrics_whenCheckingShouldInsertOrUpsert() {
+    List<UpsertCondition> conditions = givenMultipleConditions();
+
+    SolrInputDocument oldDoc = new SolrInputDocument();
+    SolrInputDocument newDoc = new SolrInputDocument();
+
+    oldDoc.setField("compliance_reason", "soft_delete");
+    oldDoc.setField("metric1", "kept-from-old1");
+    oldDoc.setField("metric2", "kept-from-old2");
+    oldDoc.setField("metric3", "not-kept-from-old");
+    newDoc.setField("new_field", "kept-from-new");
+
+    assertThat(UpsertCondition.shouldInsertOrUpsert(conditions, oldDoc, newDoc), is(true));
+    assertThat(newDoc.getFieldValue("compliance_reason"), is("soft_delete"));
+    assertThat(newDoc.getFieldValue("metric1"), is("kept-from-old1"));
+    assertThat(newDoc.getFieldValue("metric2"), is("kept-from-old2"));
+    assertThat(newDoc.getFieldValue("metric3"), nullValue());
+  }
+
+  @Test
   public void givenForceInsert_whenCheckingShouldInsertOrUpsert() {
     List<UpsertCondition> conditions = givenMultipleConditions();
 
@@ -666,6 +642,15 @@ public class UpsertConditionTest {
   }
 
   private List<UpsertCondition> givenMultipleConditions() {
+    // this roughly represents some sort of "compliance" scenario
+    // where we want to delete and/or redact documents in a variety
+    // of ways
+    // also some other rules are in here around updating metrics etc
+    // just so we can test how things interact
+    // this might represent a system where we receive deletes + updates
+    // requests for documents, but don't have the full document to hand (elsewhere)
+    // or we expect to receive delete + update requests _prior_ to receiving the
+    // actual documents (at least sometimes)
     NamedList<?> args = namedList(ImmutableListMultimap.<String, NamedList<String>>builder()
         .put("forceInsert", namedList(ImmutableListMultimap.of(
             "must", "NEW.force_insert:true",
@@ -675,18 +660,21 @@ public class UpsertConditionTest {
             "must", "OLD.compliance_reason:delete",
             "action", "skip"
         )))
-        .put("existingSoftDeletes", namedList(ImmutableListMultimap.of(
-            "must", "OLD.compliance_reason:soft_delete",
-            "action", "upsert:compliance_reason"
-        )))
-        .put("newSoftDeletes", namedList(ImmutableListMultimap.of(
-            "must", "NEW.compliance_reason:soft_delete",
-            "action", "upsert:*"
-        )))
+        // updating metrics will fall through as it has no insert
         .put("existingMetrics", namedList(ImmutableListMultimap.of(
             "should", "OLD.metric1:*",
             "should", "OLD.metric2:*",
             "action", "upsert:metric1,metric2"
+        )))
+        .put("existingSoftDeletes", namedList(ImmutableListMultimap.of(
+            "must", "OLD.compliance_reason:soft_delete",
+            "action", "upsert:compliance_reason",
+            "action", "insert"
+        )))
+        .put("newSoftDeletes", namedList(ImmutableListMultimap.of(
+            "must", "NEW.compliance_reason:soft_delete",
+            "action", "upsert:*",
+            "action", "insert"
         )))
         .put("skipIfNotExists", namedList(ImmutableListMultimap.of(
             "must_not", "OLD.*",

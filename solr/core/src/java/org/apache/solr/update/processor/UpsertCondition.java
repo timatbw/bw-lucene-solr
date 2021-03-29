@@ -48,14 +48,12 @@ class UpsertCondition {
 
   private final String name;
   private final List<FieldRule> rules;
-  private final Action action;
-  private final List<String> upsertFields;
+  private final List<Action> actions;
 
-  UpsertCondition(String name, Action action, List<String> upsertFields, List<FieldRule> rules) {
+  UpsertCondition(String name, List<FieldRule> rules, List<Action> actions) {
     this.name = name;
-    this.action = action;
-    this.upsertFields = upsertFields;
     this.rules = rules;
+    this.actions = actions;
   }
 
   static List<UpsertCondition> readConditions(NamedList args) {
@@ -76,18 +74,16 @@ class UpsertCondition {
   static boolean shouldInsertOrUpsert(List<UpsertCondition> conditions, SolrInputDocument oldDoc, SolrInputDocument newDoc) {
     for (UpsertCondition condition: conditions) {
       if (condition.matches(oldDoc, newDoc)) {
-        log.debug("Condition {} matched, taking action", condition.getName());
-        if (condition.isSkip()) {
+        log.debug("Condition {} matched, running actions", condition.getName());
+        ActionType action = condition.run(oldDoc, newDoc);
+        if (action == ActionType.SKIP) {
           log.debug("Condition {} matched - skipping insert", condition.getName());
           return false;
         }
-        if (condition.isInsert()) {
+        if (action == ActionType.INSERT) {
           log.debug("Condition {} matched - will insert", condition.getName());
           break;
         }
-
-        condition.copyOldDocFields(oldDoc, newDoc);
-        break;
       }
     }
     return true;
@@ -95,32 +91,12 @@ class UpsertCondition {
 
   static UpsertCondition parse(String name, NamedList<String> args) {
     List<FieldRule> rules = new ArrayList<>();
-    Action action = null;
-    List<String> upsertFields = null;
+    List<Action> actions = new ArrayList<>();
     for (Map.Entry<String, String> entry: args) {
       String key = entry.getKey();
       if ("action".equals(key)) {
         String actionValue = entry.getValue();
-        Matcher m = ACTION_PATTERN.matcher(actionValue);
-        if (!m.matches()) {
-          throw new SolrException(SERVER_ERROR, "'" + actionValue + "' not a valid action");
-        }
-        if (m.group(1) != null) {
-          if ("skip".equals(m.group(1))) {
-            action = Action.SKIP;
-          } else {
-            action = Action.INSERT;
-          }
-          upsertFields = null;
-        } else {
-          if ("upsert".equals(m.group(2))) {
-            action = Action.UPSERT;
-          } else {
-            action = Action.RETAIN;
-          }
-          String fields = m.group(3);
-          upsertFields = Arrays.asList(fields.split(","));
-        }
+        actions.add(Action.parse(actionValue));
       } else {
         BooleanClause.Occur occur;
         try {
@@ -132,43 +108,29 @@ class UpsertCondition {
         rules.add(FieldRule.parse(occur, value));
       }
     }
-    if (action == null) {
-      throw new SolrException(SERVER_ERROR, "no action defined for condition: " + name);
+    if (actions.isEmpty()) {
+      throw new SolrException(SERVER_ERROR, "no actions defined for condition: " + name);
     }
     if (rules.isEmpty()) {
       throw new SolrException(SERVER_ERROR, "no rules specified for condition: " + name);
     }
-    return new UpsertCondition(name, action, upsertFields, rules);
+    return new UpsertCondition(name, rules, actions);
   }
 
   String getName() {
     return name;
   }
 
-  boolean isSkip() {
-    return action == Action.SKIP;
-  }
-
-  boolean isInsert() {
-    return action == Action.INSERT;
-  }
-
-  void copyOldDocFields(SolrInputDocument oldDoc, SolrInputDocument newDoc) {
-    if (action != Action.UPSERT && action != Action.RETAIN) {
-      throw new IllegalStateException("Can only copy old doc fields when upserting or retaining");
-    }
-    Collection<String> fieldsToCopy;
-    if (ALL_FIELDS.equals(upsertFields)) {
-      fieldsToCopy = oldDoc.keySet();
-    } else {
-      fieldsToCopy = upsertFields;
-    }
-    fieldsToCopy.forEach(field -> {
-      if (action == Action.RETAIN || !newDoc.containsKey(field)) {
-        SolrInputField inputField = oldDoc.getField(field);
-        newDoc.put(field, inputField);
+  ActionType run(SolrInputDocument oldDoc, SolrInputDocument newDoc) {
+    ActionType last = ActionType.INSERT;
+    for (Action action: actions) {
+      action.run(oldDoc, newDoc);
+      last = action.type;
+      if (last == ActionType.SKIP || last == ActionType.INSERT) {
+        break;
       }
-    });
+    }
+    return last;
   }
 
   boolean matches(SolrInputDocument oldDoc, SolrInputDocument newDoc) {
@@ -197,7 +159,7 @@ class UpsertCondition {
     return atLeastOneMatched;
   }
 
-  enum Action {
+  enum ActionType {
     UPSERT, // copy some/all fields from the OLD doc (when they don't exist on the new doc)
     RETAIN, // copy some/all fields from the OLD doc always
     INSERT, // just do a regular insert as normal
@@ -296,6 +258,59 @@ class UpsertCondition {
         }
         return false;
       };
+    }
+  }
+
+  private static class Action {
+    private final ActionType type;
+    private final List<String> fields;
+
+    Action(ActionType type, List<String> fields) {
+      this.type = type;
+      this.fields = fields;
+    }
+
+    static Action parse(String actionValue) {
+      Matcher m = ACTION_PATTERN.matcher(actionValue);
+      if (!m.matches()) {
+        throw new SolrException(SERVER_ERROR, "'" + actionValue + "' not a valid action");
+      }
+      ActionType type;
+      List<String> fields;
+      if (m.group(1) != null) {
+        if ("skip".equals(m.group(1))) {
+          type = ActionType.SKIP;
+        } else {
+          type = ActionType.INSERT;
+        }
+        fields = null;
+      } else {
+        if ("upsert".equals(m.group(2))) {
+          type = ActionType.UPSERT;
+        } else {
+          type = ActionType.RETAIN;
+        }
+        String fieldsConfig = m.group(3);
+        fields = Arrays.asList(fieldsConfig.split(","));
+      }
+      return new Action(type, fields);
+    }
+
+    void run(SolrInputDocument oldDoc, SolrInputDocument newDoc) {
+      if (type == ActionType.UPSERT || type == ActionType.RETAIN) {
+        Collection<String> fieldsToCopy;
+        if (ALL_FIELDS.equals(fields)) {
+          fieldsToCopy = oldDoc.keySet();
+        } else {
+          fieldsToCopy = fields;
+        }
+        fieldsToCopy.forEach(field -> {
+          if (type == ActionType.RETAIN || !newDoc.containsKey(field)) {
+            SolrInputField inputField = oldDoc.getField(field);
+            newDoc.put(field, inputField);
+          }
+        });
+      }
     }
   }
 }
