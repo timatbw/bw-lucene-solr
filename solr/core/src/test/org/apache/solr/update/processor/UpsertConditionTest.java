@@ -103,6 +103,15 @@ public class UpsertConditionTest {
     UpsertCondition.parse("bad-action", args);
   }
 
+  @Test(expected = SolrException.class)
+  public void givenBadNullify_whenParsingCondition() {
+    NamedList<String> args = namedList(ImmutableListMultimap.of(
+        "must", "OLD.field:value",
+        "action", "nullify:*"
+    ));
+    UpsertCondition.parse("bad-action", args);
+  }
+
   @Test
   public void givenNoOldDoc_whenMatching() {
     NamedList<String> args = new NamedList<>(ImmutableMap.of(
@@ -521,6 +530,32 @@ public class UpsertConditionTest {
   }
 
   @Test
+  public void givenNullify_whenRunning() {
+    NamedList<String> args = namedList(ImmutableListMultimap.of(
+        "must", "OLD.field:value",
+        "action", "nullify:field,other_field"
+    ));
+
+    UpsertCondition condition = UpsertCondition.parse("nullify", args);
+
+    assertThat(condition.getName(), is("nullify"));
+
+    SolrInputDocument oldDoc = new SolrInputDocument();
+    SolrInputDocument newDoc = new SolrInputDocument();
+    newDoc.setField("field", "value");
+    newDoc.setField("other_field", "other-value");
+    newDoc.setField("left-alone", "not-null");
+
+    assertThat(condition.run(oldDoc, newDoc), is(UpsertCondition.ActionType.NULLIFY));
+
+    assertThat(newDoc.getFieldValue("field"), nullValue());
+    assertThat(newDoc.getField("field"), notNullValue());
+    assertThat(newDoc.getFieldValue("other_field"), nullValue());
+    assertThat(newDoc.getField("field"), notNullValue());
+    assertThat(newDoc.getFieldValue("left-alone"), is("not-null"));
+  }
+
+  @Test
   public void givenExistingPermanentDelete_whenCheckingShouldInsertOrUpsert() {
     List<UpsertCondition> conditions = givenMultipleConditions();
 
@@ -633,6 +668,28 @@ public class UpsertConditionTest {
     assertThat(newDoc.getFieldValue("date"), is("today"));
   }
 
+  @Test
+  public void givenOldDocMarkedRedact_whenCheckingShouldInsertOrUpsert() {
+    List<UpsertCondition> conditions = givenMultipleConditions();
+
+    SolrInputDocument newDoc = new SolrInputDocument();
+    SolrInputDocument oldDoc = new SolrInputDocument();
+
+    oldDoc.setField("sensitive_fields", "redact");
+    newDoc.setField("sensitive_field1", "should-be-redacted");
+    newDoc.setField("sensitive_field2", "should-be-redacted");
+    newDoc.setField("new_field", "kept-from-new");
+
+    assertThat(UpsertCondition.shouldInsertOrUpsert(conditions, oldDoc, newDoc), is(true));
+
+    assertThat(newDoc.getField("sensitive_field1"), notNullValue());
+    assertThat(newDoc.getField("sensitive_field1").getValue(), nullValue());
+    assertThat(newDoc.getField("sensitive_field2"), notNullValue());
+    assertThat(newDoc.getField("sensitive_field2").getValue(), nullValue());
+    assertThat(newDoc.getFieldValue("sensitive_fields"), is("redact"));
+    assertThat(newDoc.getFieldValue("new_field"), is("kept-from-new"));
+  }
+
   @Test(expected = SolrException.class)
   public void givenInvalidConfig_whenReadingConditions() {
     NamedList<Object> args = new NamedList<>();
@@ -665,6 +722,13 @@ public class UpsertConditionTest {
             "should", "OLD.metric1:*",
             "should", "OLD.metric2:*",
             "action", "upsert:metric1,metric2"
+        )))
+        // should also fall through as we'd want redaction to combine with
+        // soft deletes (in case the doc is un-deleted later)
+        .put("redaction", namedList(ImmutableListMultimap.of(
+            "must", "OLD.sensitive_fields:redact",
+            "action", "nullify:sensitive_field1,sensitive_field2",
+            "action", "upsert:sensitive_fields"
         )))
         .put("existingSoftDeletes", namedList(ImmutableListMultimap.of(
             "must", "OLD.compliance_reason:soft_delete",
