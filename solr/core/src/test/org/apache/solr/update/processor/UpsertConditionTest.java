@@ -530,6 +530,26 @@ public class UpsertConditionTest {
   }
 
   @Test
+  public void givenUpsertAndNoOldDoc_whenRunning() {
+    NamedList<String> args = namedList(ImmutableListMultimap.of(
+        "must", "NEW.field:value",
+        "action", "upsert:field,other_field"
+    ));
+
+    UpsertCondition condition = UpsertCondition.parse("upsert", args);
+
+    assertThat(condition.getName(), is("upsert"));
+
+    SolrInputDocument newDoc = new SolrInputDocument();
+    newDoc.setField("field", "left-alone");
+
+    assertThat(condition.run(null, newDoc), is(UpsertCondition.ActionType.UPSERT));
+
+    assertThat(newDoc.getFieldValue("field"), is("left-alone"));
+  }
+
+
+  @Test
   public void givenNullify_whenRunning() {
     NamedList<String> args = namedList(ImmutableListMultimap.of(
         "must", "OLD.field:value",
