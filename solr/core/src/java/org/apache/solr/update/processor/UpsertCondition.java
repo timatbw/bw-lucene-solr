@@ -303,6 +303,9 @@ class UpsertCondition {
 
     void run(SolrInputDocument oldDoc, SolrInputDocument newDoc) {
       if (type == ActionType.UPSERT || type == ActionType.RETAIN) {
+        if (oldDoc == null) {
+          return;
+        }
         Collection<String> fieldsToCopy;
         if (ALL_FIELDS.equals(fields)) {
           fieldsToCopy = oldDoc.keySet();
