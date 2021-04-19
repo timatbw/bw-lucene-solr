@@ -544,6 +544,10 @@ public final class SolrCore implements SolrInfoBean, SolrMetricProducer, Closeab
       delPolicy = new SolrDeletionPolicy();
     }
 
+    if (delPolicy instanceof SolrMetricProducer) {
+      coreMetricManager.registerMetricProducer("IndexDeletionPolicy", (SolrMetricProducer)delPolicy);
+    }
+
     return new IndexDeletionPolicyWrapper(delPolicy, snapshotMgr);
   }
 
