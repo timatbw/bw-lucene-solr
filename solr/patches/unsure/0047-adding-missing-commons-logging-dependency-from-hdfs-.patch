@@ -1,0 +1,25 @@
+From c395733fc5613e1ff2ef3e8e2f715b7997d923b0 Mon Sep 17 00:00:00 2001
+From: John Montgomery <johnm@brandwatch.com>
+Date: Fri, 19 Feb 2021 16:45:43 +0000
+Subject: [PATCH 47/83] adding missing commons logging dependency from hdfs
+ tests
+
+---
+ solr/core/ivy.xml | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/solr/core/ivy.xml b/solr/core/ivy.xml
+index cab1a7da18..5fc3321309 100644
+--- a/solr/core/ivy.xml
++++ b/solr/core/ivy.xml
+@@ -102,6 +102,7 @@
+     <dependency org="org.mortbay.jetty" name="jetty-sslengine" rev="${/org.mortbay.jetty/jetty-sslengine}" conf="test.DfsMiniCluster"/>
+     <dependency org="com.sun.jersey" name="jersey-core" rev="${/com.sun.jersey/jersey-core}" conf="test.DfsMiniCluster"/>
+     <dependency org="com.sun.jersey" name="jersey-server" rev="${/com.sun.jersey/jersey-server}" conf="test.DfsMiniCluster"/>
++    <dependency org="commons-logging" name="commons-logging" rev="${/commons-logging/commons-logging}" conf="test.DfsMiniCluster"/>
+     <dependency org="commons-collections" name="commons-collections" rev="${/commons-collections/commons-collections}" conf="test.DfsMiniCluster"/>
+     <dependency org="io.netty" name="netty-all" rev="${/io.netty/netty-all}" conf="test.DfsMiniCluster"/>
+     <dependency org="org.apache.htrace" name="htrace-core4" rev="${/org.apache.htrace/htrace-core4}" conf="test.DfsMiniCluster"/>
+-- 
+2.32.1 (Apple Git-133)
+

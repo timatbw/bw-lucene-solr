@@ -1,0 +1,78 @@
+From 289cab0ef6564ba3838c1cb02292b43fae32a1b5 Mon Sep 17 00:00:00 2001
+From: Richard Goodman <richardg@brandwatch.com>
+Date: Mon, 18 May 2020 18:02:40 +0100
+Subject: [PATCH 30/83] Make images push to gcr
+
+This should hopefully push to our private repo now
+
+NT added comments
+---
+ Jenkinsfile | 23 +++++++++++++++++++++++
+ 1 file changed, 23 insertions(+)
+
+diff --git a/Jenkinsfile b/Jenkinsfile
+index a48bdaa2b2..1c32d2a2c4 100644
+--- a/Jenkinsfile
++++ b/Jenkinsfile
+@@ -23,8 +23,10 @@ node('docker') {
+     }
+ 
+     stage ('Build images') {
++        // TODO - make function for pushing images
+         baseImageExist = doesBaseImageExist(major_version)
+         if ( baseImageExist ) {
++            echo "Base image exists, using that"
+             withEnv(["DOCKER_BUILDKIT=1"]) {
+                 sh """ docker build \
+                     -f Dockerfile \
+@@ -32,22 +34,42 @@ node('docker') {
+                     --build-arg MAJOR_VERSION=${major_version} \
+                     -t ${gcpProject}/bw-lucene-solr:${version} .
+                 """
++                img = docker.image("${gcpProject}/bw-lucene-solr:${version}")
++                docker.withRegistry("https://eu.gcr.io", "gcr:${gcpProject}") {
++                    img.push(version)
++                }
+             }
+         } else {
++            echo "Unable to find base image, building"
+             withEnv(["DOCKER_BUILDKIT=1"]) {
+                 sh "docker build -f base.Dockerfile -t ${gcpProject}/ant-base:${major_version} ."
++                img = docker.image("${gcpProject}/ant-base:${major_version}")
++                docker.withRegistry("https://eu.gcr.io", "gcr:${gcpProject}") {
++                    img.push(major_version)
++                }
+                 sh """ docker build \
+                     -f Dockerfile \
+                     --build-arg REPO=${gcpProject} \
+                     --build-arg MAJOR_VERSION=${major_version} \
+                     -t ${gcpProject}/bw-lucene-solr:${version} .
+                 """
++                img = docker.image("${gcpProject}/bw-lucene-solr:${version}")
++                docker.withRegistry("https://eu.gcr.io", "gcr:${gcpProject}") {
++                    img.push(version)
++                }
+             }
+         }
+     }
+ }
+ 
+ def doesBaseImageExist(String imageVersion) {
++    /*
++        Originally, the docker file would create a new debian image and install
++        all the dependencies needed to build solr, to save time, I've separated
++        the two "stages" into separate docker files, with this, I then do a check
++        to see if the ant-base image exists in our gcr, if it does, then it'll skip
++        building it which should cut down on processing time
++    */
+     try {
+         img = docker.image("${gcpProject}/ant-base:${imageVersion}").withRun { c ->
+             sh 'ant --help'
+@@ -57,3 +79,4 @@ def doesBaseImageExist(String imageVersion) {
+         return false
+     }
+ }
++
+-- 
+2.32.1 (Apple Git-133)
+

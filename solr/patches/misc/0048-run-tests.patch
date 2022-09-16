@@ -1,0 +1,29 @@
+From 8f4dccf55b80f0267fa9ef24d73bf87675215674 Mon Sep 17 00:00:00 2001
+From: John Montgomery <johnm@brandwatch.com>
+Date: Mon, 22 Feb 2021 11:57:36 +0000
+Subject: [PATCH 48/83] run tests
+
+Ignore bad apples though
+---
+ Jenkinsfile | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/Jenkinsfile b/Jenkinsfile
+index 7247e4a48f..401babee2b 100644
+--- a/Jenkinsfile
++++ b/Jenkinsfile
+@@ -27,6 +27,11 @@ node('docker') {
+         ant_version = versions["ant_version"]
+     }
+ 
++    stage ('Tests') {
++        sh "ant ivy-bootstrap"
++        sh "ant -Dtests.badapples=false test"
++    }
++
+     stage ('Build images') {
+         withEnv(["DOCKER_BUILDKIT=1"]) {
+             sh """ docker build -f base.Dockerfile \
+-- 
+2.32.1 (Apple Git-133)
+

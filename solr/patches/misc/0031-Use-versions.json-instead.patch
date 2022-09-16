@@ -1,0 +1,53 @@
+From 66b10e919df107c29a20cc1f52840df25f26bb73 Mon Sep 17 00:00:00 2001
+From: Richard Goodman <richardg@brandwatch.com>
+Date: Tue, 19 May 2020 10:12:18 +0100
+Subject: [PATCH 31/83] Use versions.json instead
+
+Instead of the funky regex, and relying on the branch name, just going
+ot use a versions.json instead
+---
+ Jenkinsfile   | 12 +++---------
+ versions.json |  4 ++++
+ 2 files changed, 7 insertions(+), 9 deletions(-)
+ create mode 100644 versions.json
+
+diff --git a/Jenkinsfile b/Jenkinsfile
+index 1c32d2a2c4..c66bfe38fe 100644
+--- a/Jenkinsfile
++++ b/Jenkinsfile
+@@ -12,14 +12,9 @@ node('docker') {
+             userRemoteConfigs: scm.userRemoteConfigs
+         ])
+ 
+-        // Could change this to be held within a versions.json file if preferred
+-        // def branch = env.BRANCH_NAME
+-        // TODO - change this when no longer using this branch name
+-        test_branch = 'bw_branch_7_7_2'
+-        branch_period = test_branch.replaceAll('_', '.')
+-        def regex_capture = branch_period =~ /\d.+/
+-        version = regex_capture[0]
+-        major_version = version.substring(0,1)
++        versions = readJSON file: "versions.json"
++        version = versions["version"]
++        major_version = versions["major_version"]
+     }
+ 
+     stage ('Build images') {
+@@ -79,4 +74,3 @@ def doesBaseImageExist(String imageVersion) {
+         return false
+     }
+ }
+-
+diff --git a/versions.json b/versions.json
+new file mode 100644
+index 0000000000..78c87a9191
+--- /dev/null
++++ b/versions.json
+@@ -0,0 +1,4 @@
++{
++  "version": "7.7.2",
++  "major_version": "7"
++}
+-- 
+2.32.1 (Apple Git-133)
+

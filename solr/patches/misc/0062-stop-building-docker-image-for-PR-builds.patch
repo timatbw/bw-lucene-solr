@@ -1,0 +1,47 @@
+From f9d8982e0ffa3d9ec717f5c80ec0a7be9f2f65a8 Mon Sep 17 00:00:00 2001
+From: John Montgomery <johnm@brandwatch.com>
+Date: Mon, 1 Mar 2021 08:51:20 +0000
+Subject: [PATCH 62/83] stop building docker image for PR builds
+
+---
+ Jenkinsfile | 18 +++++++++++-------
+ 1 file changed, 11 insertions(+), 7 deletions(-)
+
+diff --git a/Jenkinsfile b/Jenkinsfile
+index 7b708f5ed4..293f1dda5e 100644
+--- a/Jenkinsfile
++++ b/Jenkinsfile
+@@ -38,19 +38,23 @@ node('docker') {
+     }
+ 
+     stage ('Build images') {
+-        withEnv(["DOCKER_BUILDKIT=1"]) {
+-            sh """ docker build -f base.Dockerfile \
++        if (env.BRANCH_NAME =~ /^PR-\d+$/) {
++            println "Skipping docker image for PR branch"
++        } else {
++            withEnv(["DOCKER_BUILDKIT=1"]) {
++                sh """ docker build -f base.Dockerfile \
+                 --build-arg ANT_VERSION=${ant_version} \
+                 -t ${gcpProject}/ant-base:${ant_version} .
+-            """
+-            pushImage("${gcpProject}/ant-base:${ant_version}", ant_version)
++                """
++                pushImage("${gcpProject}/ant-base:${ant_version}", ant_version)
+ 
+-            sh """ docker build \
++                sh """ docker build \
+                 --build-arg REPO=${gcpProject} \
+                 --build-arg ANT_VERSION=${ant_version} \
+                 -t ${gcpProject}/bw-lucene-solr:${version} .
+-            """
+-            pushImage("${gcpProject}/bw-lucene-solr:${version}", version)
++                """
++                pushImage("${gcpProject}/bw-lucene-solr:${version}", version)
++            }
+         }
+     }
+ }
+-- 
+2.32.1 (Apple Git-133)
+

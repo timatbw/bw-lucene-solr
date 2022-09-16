@@ -1,0 +1,33 @@
+From e2064b28e3a0abf744f7c133cfbbadee73111795 Mon Sep 17 00:00:00 2001
+From: Richard Goodman <richardg@brandwatch.com>
+Date: Mon, 18 May 2020 12:46:18 +0100
+Subject: [PATCH 26/83] Fleshed out Jenkinsfile
+
+---
+ Jenkinsfile | 11 ++++++++---
+ 1 file changed, 8 insertions(+), 3 deletions(-)
+
+diff --git a/Jenkinsfile b/Jenkinsfile
+index ce1fd0e42c..6cbf0c53b9 100644
+--- a/Jenkinsfile
++++ b/Jenkinsfile
+@@ -9,8 +9,13 @@ node('docker') {
+             extensions: scm.extensions + [[$class: 'CleanCheckout']],
+             userRemoteConfigs: scm.userRemoteConfigs
+         ])
+-        test = sh(script: 'printenv', returnStdout: true)
+-        echo "${test}"
+-        echo "Test: ..." + env.BRANCH_NAME
++        branch = env.BRANCH_NAME
++        test_branch = 'bw_branch_7_7_2'
++        branch_period = test_branch.replaceAll('_', '.')
++        echo "branch_period..." + branch_period
++        def regex_capture = branch_period =~ /\d.+/
++        echo "regex_capture..." + regex_capture
++        version = regex_capture[0]
++        echo "version..." + version
+     }
+ }
+-- 
+2.32.1 (Apple Git-133)
+

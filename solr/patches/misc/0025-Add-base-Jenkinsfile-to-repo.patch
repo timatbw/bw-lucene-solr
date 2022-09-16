@@ -1,0 +1,35 @@
+From 3e0c74da9d7ec1738599d4a7e40b760422068ca1 Mon Sep 17 00:00:00 2001
+From: Richard Goodman <richardg@brandwatch.com>
+Date: Mon, 18 May 2020 12:28:48 +0100
+Subject: [PATCH 25/83] Add base Jenkinsfile to repo
+
+---
+ Jenkinsfile | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+ create mode 100644 Jenkinsfile
+
+diff --git a/Jenkinsfile b/Jenkinsfile
+new file mode 100644
+index 0000000000..ce1fd0e42c
+--- /dev/null
++++ b/Jenkinsfile
+@@ -0,0 +1,16 @@
++#!groovy
++
++node('docker') {
++    stage ('Checkout') {
++        checkout([
++            $class: 'GitSCM',
++            branches: scm.branches,
++            doGenerateSubmoduleConfigurations: scm.doGenerateSubmoduleConfigurations,
++            extensions: scm.extensions + [[$class: 'CleanCheckout']],
++            userRemoteConfigs: scm.userRemoteConfigs
++        ])
++        test = sh(script: 'printenv', returnStdout: true)
++        echo "${test}"
++        echo "Test: ..." + env.BRANCH_NAME
++    }
++}
+-- 
+2.32.1 (Apple Git-133)
+

@@ -1,0 +1,37 @@
+From dd4e6b126c2e9367c620092aeb5a8e7f19c2e6f7 Mon Sep 17 00:00:00 2001
+From: Richard Goodman <richardg@brandwatch.com>
+Date: Mon, 18 May 2020 13:01:35 +0100
+Subject: [PATCH 28/83] Add build phase
+
+This should hopefully build the docker image
+---
+ Jenkinsfile | 10 +++++++---
+ 1 file changed, 7 insertions(+), 3 deletions(-)
+
+diff --git a/Jenkinsfile b/Jenkinsfile
+index 6cbf0c53b9..38023236c8 100644
+--- a/Jenkinsfile
++++ b/Jenkinsfile
+@@ -10,12 +10,16 @@ node('docker') {
+             userRemoteConfigs: scm.userRemoteConfigs
+         ])
+         branch = env.BRANCH_NAME
++        // TODO - change this when no longer using this branch name
+         test_branch = 'bw_branch_7_7_2'
+         branch_period = test_branch.replaceAll('_', '.')
+-        echo "branch_period..." + branch_period
+         def regex_capture = branch_period =~ /\d.+/
+-        echo "regex_capture..." + regex_capture
+         version = regex_capture[0]
+-        echo "version..." + version
++    }
++
++    stage ('Build and push images') {
++        withEnv(["DOCKER_BUILDKIT=1"]) {
++            sh "docker build -f Dockerfile --build-arg VERSION=${version} ."
++        }
+     }
+ }
+-- 
+2.32.1 (Apple Git-133)
+

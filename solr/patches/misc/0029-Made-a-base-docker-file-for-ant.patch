@@ -1,0 +1,200 @@
+From faf65ca56e5da6cb6d099edca302dc53aacd1138 Mon Sep 17 00:00:00 2001
+From: Richard Goodman <richardg@brandwatch.com>
+Date: Mon, 18 May 2020 16:36:33 +0100
+Subject: [PATCH 29/83] Made a base docker file for ant
+
+This makes an ant image which can be used for building the solr packages
+quicker.
+
+Work is still to be done to append it to latest major version of solr
+and implement checks for it
+
+Fix main dockerfile to work and use ant image
+
+This now uses the ant image to make it a lot easier and quicker to build
+---
+ Dockerfile      | 53 ++++++-------------------------------------------
+ Jenkinsfile     | 42 +++++++++++++++++++++++++++++++++++----
+ base.Dockerfile | 44 ++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 88 insertions(+), 51 deletions(-)
+ create mode 100644 base.Dockerfile
+
+diff --git a/Dockerfile b/Dockerfile
+index 8200135418..1881d17862 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -1,50 +1,9 @@
+-FROM debian:stretch
++ARG REPO=""
++ARG MAJOR_VERSION=latest
++FROM ${REPO}/ant-base:${MAJOR_VERSION}
+ 
+-ARG VERSION=0
+-
+-RUN echo "deb http://http.debian.net/debian stretch-backports main" | \
+-     tee --append /etc/apt/sources.list.d/stretch-backports.list > /dev/null && \ 
+-     apt-get update -y && \
+-     apt-get install -y \
+-     wget \
+-     curl \
+-     ruby \
+-     ruby-dev \
+-     rubygems \
+-     build-essential \
+-     git-core && \
+-     apt-get install -y -t stretch-backports openjdk-8-jdk && \
+-     update-java-alternatives -s java-1.8.0-openjdk-amd64 && \
+-     apt-get upgrade -y
+-
+-RUN export JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-amd64
+-
+-RUN gem install fpm
+-RUN fpm --version
+-
+-#Installing Apache Ant
+-RUN wget http://archive.apache.org/dist/ant/binaries/apache-ant-1.10.5-bin.tar.gz
+-RUN wget https://www.apache.org/dist/ant/KEYS
+-RUN wget https://www.apache.org/dist/ant/binaries/apache-ant-1.10.5-bin.tar.gz.asc
+-
+-#Verify download signature
+-RUN gpg --import KEYS
+-RUN gpg --verify apache-ant-1.10.5-bin.tar.gz.asc
+-
+-#Unpack
+-RUN tar xvfvz apache-ant-1.10.5-bin.tar.gz
+-
+-RUN mv apache-ant-1.10.5 /opt/ant
+-RUN echo ANT_HOME=/opt/ant >> /etc/environment
+-RUN ln -s /opt/ant/bin/ant /usr/bin/ant
+-
+-#Installing Apache Ivy from git repository
+-RUN git clone https://git-wip-us.apache.org/repos/asf/ant-ivy.git
+-WORKDIR /ant-ivy
+-RUN ant jar
+-WORKDIR /ant-ivy/build/artifact/jars
+-RUN scp ivy.jar /opt/ant/lib
+-
+-WORKDIR /solr-main/solr/
++ADD . /bw-lucene-solr/
++WORKDIR /bw-lucene-solr/solr/
++RUN ls
+ RUN ant ivy-bootstrap && \
+     ant clean compile dist package
+diff --git a/Jenkinsfile b/Jenkinsfile
+index 38023236c8..a48bdaa2b2 100644
+--- a/Jenkinsfile
++++ b/Jenkinsfile
+@@ -1,4 +1,6 @@
+ #!groovy
++def gcpProject =  "bw-prod-platform0"
++def baseImageExist = false
+ 
+ node('docker') {
+     stage ('Checkout') {
+@@ -9,17 +11,49 @@ node('docker') {
+             extensions: scm.extensions + [[$class: 'CleanCheckout']],
+             userRemoteConfigs: scm.userRemoteConfigs
+         ])
+-        branch = env.BRANCH_NAME
++
++        // Could change this to be held within a versions.json file if preferred
++        // def branch = env.BRANCH_NAME
+         // TODO - change this when no longer using this branch name
+         test_branch = 'bw_branch_7_7_2'
+         branch_period = test_branch.replaceAll('_', '.')
+         def regex_capture = branch_period =~ /\d.+/
+         version = regex_capture[0]
++        major_version = version.substring(0,1)
+     }
+ 
+-    stage ('Build and push images') {
+-        withEnv(["DOCKER_BUILDKIT=1"]) {
+-            sh "docker build -f Dockerfile --build-arg VERSION=${version} ."
++    stage ('Build images') {
++        baseImageExist = doesBaseImageExist(major_version)
++        if ( baseImageExist ) {
++            withEnv(["DOCKER_BUILDKIT=1"]) {
++                sh """ docker build \
++                    -f Dockerfile \
++                    --build-arg REPO=${gcpProject} \
++                    --build-arg MAJOR_VERSION=${major_version} \
++                    -t ${gcpProject}/bw-lucene-solr:${version} .
++                """
++            }
++        } else {
++            withEnv(["DOCKER_BUILDKIT=1"]) {
++                sh "docker build -f base.Dockerfile -t ${gcpProject}/ant-base:${major_version} ."
++                sh """ docker build \
++                    -f Dockerfile \
++                    --build-arg REPO=${gcpProject} \
++                    --build-arg MAJOR_VERSION=${major_version} \
++                    -t ${gcpProject}/bw-lucene-solr:${version} .
++                """
++            }
++        }
++    }
++}
++
++def doesBaseImageExist(String imageVersion) {
++    try {
++        img = docker.image("${gcpProject}/ant-base:${imageVersion}").withRun { c ->
++            sh 'ant --help'
+         }
++        return true
++    } catch (Exception e) {
++        return false
+     }
+ }
+diff --git a/base.Dockerfile b/base.Dockerfile
+new file mode 100644
+index 0000000000..ff60d7d79f
+--- /dev/null
++++ b/base.Dockerfile
+@@ -0,0 +1,44 @@
++FROM debian:stretch
++
++RUN echo "deb http://http.debian.net/debian stretch-backports main" | \
++     tee --append /etc/apt/sources.list.d/stretch-backports.list > /dev/null && \ 
++     apt-get update -y && \
++     apt-get install -y \
++     wget \
++     curl \
++     ruby \
++     ruby-dev \
++     rubygems \
++     build-essential \
++     git-core && \
++     apt-get install -y -t stretch-backports openjdk-8-jdk && \
++     update-java-alternatives -s java-1.8.0-openjdk-amd64 && \
++     apt-get upgrade -y
++
++RUN export JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-amd64
++
++RUN gem install fpm
++RUN fpm --version
++
++#Installing Apache Ant
++RUN wget http://archive.apache.org/dist/ant/binaries/apache-ant-1.10.5-bin.tar.gz
++RUN wget https://www.apache.org/dist/ant/KEYS
++RUN wget https://archive.apache.org/dist/ant/binaries/apache-ant-1.10.5-bin.tar.gz.asc
++
++#Verify download signature
++RUN gpg --import KEYS
++RUN gpg --verify apache-ant-1.10.5-bin.tar.gz.asc
++
++#Unpack
++RUN tar xvfvz apache-ant-1.10.5-bin.tar.gz
++
++RUN mv apache-ant-1.10.5 /opt/ant
++RUN echo ANT_HOME=/opt/ant >> /etc/environment
++RUN ln -s /opt/ant/bin/ant /usr/bin/ant
++
++#Installing Apache Ivy from git repository
++RUN git clone https://git-wip-us.apache.org/repos/asf/ant-ivy.git
++WORKDIR /ant-ivy
++RUN ant jar
++WORKDIR /ant-ivy/build/artifact/jars
++RUN scp ivy.jar /opt/ant/lib
+-- 
+2.32.1 (Apple Git-133)
+

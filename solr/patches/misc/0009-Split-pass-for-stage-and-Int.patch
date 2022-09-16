@@ -1,0 +1,46 @@
+From 3af585fce0a7d2e42154126c4e0e47aaa14e1311 Mon Sep 17 00:00:00 2001
+From: Sergey Egorov <segorov@bly.btn1.brandwatch.net>
+Date: Mon, 13 Aug 2018 16:16:11 +0100
+Subject: [PATCH 09/83] Split pass for stage and Int
+
+---
+ Dockerfile | 14 ++++++++++----
+ 1 file changed, 10 insertions(+), 4 deletions(-)
+
+diff --git a/Dockerfile b/Dockerfile
+index e8db5be772..cf12c6c793 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -1,11 +1,17 @@
+ FROM debian:jessie
+ 
+ ARG buildn
+-ARG pass
++
++ARG stage
++ARG int
+ 
+ ENV BUILD_NUMBER=$buildn
+ ENV SOLR_VERSION=7.4.0
+-ENV PASS=$pass
++
++
++ENV STAGE=$stage
++ENV INT=$int
++
+ 
+ RUN echo $SOLR_VERSION
+ RUN echo $BUILD_NUMBER
+@@ -66,5 +72,5 @@ WORKDIR /usr/local/bw-lucene-solr/solr/package
+ 
+ 
+ RUN fpm --description "Brandwatch Solr distribution" --name solr -v $SOLR_VERSION-SNAPSHOT-bwbuild${BUILD_NUMBER} --prefix /opt -s tar -t deb solr-$SOLR_VERSION-SNAPSHOT.tgz
+-RUN curl http://apt.service0.btn1.bwcom.net/packages -u $PASS -F my_file=@solr_$SOLR_VERSION-SNAPSHOT-bwbuild${BUILD_NUMBER}_amd64.deb -F name=solr_$SOLR_VERSION-SNAPSHOT-bwbuild${BUILD_NUMBER}_amd64.deb
+-RUN curl https://aptly.stage.brandwatch.net/packages -u $PASS -F my_file=@solr_$SOLR_VERSION-SNAPSHOT-bwbuild${BUILD_NUMBER}_amd64.deb -F name=solr_$SOLR_VERSION-SNAPSHOT-bwbuild${BUILD_NUMBER}_amd64.deb
+\ No newline at end of file
++RUN curl http://apt.service0.btn1.bwcom.net/packages -u $INT -F my_file=@solr_$SOLR_VERSION-SNAPSHOT-bwbuild${BUILD_NUMBER}_amd64.deb -F name=solr_$SOLR_VERSION-SNAPSHOT-bwbuild${BUILD_NUMBER}_amd64.deb
++RUN curl https://aptly.stage.brandwatch.net/packages -u $STAGE -F my_file=@solr_$SOLR_VERSION-SNAPSHOT-bwbuild${BUILD_NUMBER}_amd64.deb -F name=solr_$SOLR_VERSION-SNAPSHOT-bwbuild${BUILD_NUMBER}_amd64.deb
+\ No newline at end of file
+-- 
+2.32.1 (Apple Git-133)
+

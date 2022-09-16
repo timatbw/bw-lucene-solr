@@ -1,0 +1,40 @@
+From aeca8048a3fe86010b36318bc4a5dffdeba5bd71 Mon Sep 17 00:00:00 2001
+From: Richard Goodman <richardg@brandwatch.com>
+Date: Fri, 3 Jul 2020 15:43:26 +0100
+Subject: [PATCH 37/83] Weird bug w/ docs
+
+---
+ solr/solr-ref-guide/src/stream-decorator-reference.adoc | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/solr/solr-ref-guide/src/stream-decorator-reference.adoc b/solr/solr-ref-guide/src/stream-decorator-reference.adoc
+index c99cd971af..845f05cfd8 100644
+--- a/solr/solr-ref-guide/src/stream-decorator-reference.adoc
++++ b/solr/solr-ref-guide/src/stream-decorator-reference.adoc
+@@ -595,20 +595,20 @@ while(true) {
+ daemonStream.close();
+ ----
+ 
+-== delete
++== delete-stream
+ 
+ The `delete` function wraps another functions and uses the `id` and `\_version_` values found to sends the tuples to a SolrCloud collection as <<uploading-data-with-index-handlers.adoc#delete-operations,Delete By Id>> commands.
+ 
+ This is similar to the `<<#update,update()>>` function described below.
+ 
+-=== delete Parameters
++=== delete-stream Parameters
+ 
+ * `destinationCollection`: (Mandatory) The collection where the tuples will deleted.
+ * `batchSize`: (Mandatory) The indexing batch size.
+ * `pruneVersionField`: (Optional, defaults to `false`) Wether to prune `\_version_` values from tuples
+ * `StreamExpression`: (Mandatory)
+ 
+-=== delete Syntax
++=== delete-stream Syntax
+ 
+ [source,text]
+ ----
+-- 
+2.32.1 (Apple Git-133)
+

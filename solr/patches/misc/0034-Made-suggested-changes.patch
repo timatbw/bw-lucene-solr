@@ -1,0 +1,188 @@
+From 00ab0a8e8ea61fe559dba9ea1f20cea78d4f113f Mon Sep 17 00:00:00 2001
+From: Richard Goodman <richardg@brandwatch.com>
+Date: Tue, 19 May 2020 14:55:09 +0100
+Subject: [PATCH 34/83] Made suggested changes
+
+Made the suggested changes, most stylistic, but have also done the
+following:
+
+  - Changed the base image to be simpler, and easily maintainable
+  - Added support for ant versioning
+  - Added build number to images
+  - Changed solr build process args which should be quicker
+---
+ Dockerfile      | 10 +++++-----
+ Jenkinsfile     | 44 ++++++++++++++++++-----------------------
+ base.Dockerfile | 52 +++++++++++--------------------------------------
+ versions.json   |  2 +-
+ 4 files changed, 36 insertions(+), 72 deletions(-)
+
+diff --git a/Dockerfile b/Dockerfile
+index 183e2d571f..ebfa307558 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -1,8 +1,8 @@
+-ARG REPO=""
+-ARG MAJOR_VERSION=latest
+-FROM ${REPO}/ant-base:${MAJOR_VERSION}
++ARG REPO
++ARG ANT_VERSION
++FROM ${REPO}/ant-base:${ANT_VERSION}
+ 
+-ADD . /bw-lucene-solr/
++COPY . /bw-lucene-solr/
+ WORKDIR /bw-lucene-solr/solr/
+ RUN ant ivy-bootstrap && \
+-    ant clean compile dist package
++    ant --noconfig -Dtests.badapples=false clean dist package
+diff --git a/Jenkinsfile b/Jenkinsfile
+index 5982bed860..9629704259 100644
+--- a/Jenkinsfile
++++ b/Jenkinsfile
+@@ -1,6 +1,6 @@
+ #!groovy
+-gcpProject =  "bw-prod-platform0"
+-baseImageExist = false
++gcpProject = "bw-prod-platform0"
++baseImageExists = false
+ 
+ def doesBaseImageExist(String imageVersion) {
+     /*
+@@ -21,10 +21,12 @@ def doesBaseImageExist(String imageVersion) {
+ }
+ 
+ def pushImage(String imageID, String imageVersion) {
++    buildNumber = "build_${env.BUILD_NUMBER}"
+     withEnv(["DOCKER_BUILDKIT=1"]) {
+         img = docker.image(imageID)
+         docker.withRegistry("https://eu.gcr.io", "gcr:${gcpProject}") {
+             img.push(imageVersion)
++            img.push(buildNumber)
+         }
+     }
+ }
+@@ -41,36 +43,28 @@ node('docker') {
+ 
+         versions = readJSON file: "versions.json"
+         version = versions["version"]
+-        major_version = versions["major_version"]
++        ant_version = versions["ant_version"]
+     }
+ 
+     stage ('Build images') {
+-        baseImageExist = doesBaseImageExist(major_version)
+-        if ( baseImageExist ) {
+-            echo "Base image exists, using that"
+-            withEnv(["DOCKER_BUILDKIT=1"]) {
+-                sh """ docker build \
+-                    -f Dockerfile \
+-                    --build-arg REPO=${gcpProject} \
+-                    --build-arg MAJOR_VERSION=${major_version} \
+-                    -t ${gcpProject}/bw-lucene-solr:${version} .
+-                """
+-                pushImage("${gcpProject}/bw-lucene-solr:${version}", version)
+-            }
+-        } else {
++        baseImageExists = doesBaseImageExist(ant_version)
++        if ( !baseImageExists ) {
+             echo "Unable to find base image, building"
+             withEnv(["DOCKER_BUILDKIT=1"]) {
+-                sh "docker build -f base.Dockerfile -t ${gcpProject}/ant-base:${major_version} ."
+-                pushImage("${gcpProject}/ant-base:${major_version}", major_version)
+-
+-                sh """ docker build \
+-                    -f Dockerfile \
+-                    --build-arg REPO=${gcpProject} \
+-                    --build-arg MAJOR_VERSION=${major_version} \
+-                    -t ${gcpProject}/bw-lucene-solr:${version} .
++                sh """ docker build -f base.Dockerfile \
++                    --build-arg ANT_VERSION=${ant_version} \
++                    -t ${gcpProject}/ant-base:${ant_version} .
+                 """
+-                pushImage("${gcpProject}/bw-lucene-solr:${version}", version)
++                pushImage("${gcpProject}/ant-base:${ant_version}", ant_version)
+             }
+         }
++        withEnv(["DOCKER_BUILDKIT=1"]) {
++            sh """ docker build \
++                --build-arg REPO=${gcpProject} \
++                --build-arg ANT_VERSION=${ant_version} \
++                -t ${gcpProject}/bw-lucene-solr:${version} .
++            """
++            pushImage("${gcpProject}/bw-lucene-solr:${version}", version)
++        }
+     }
+ }
+diff --git a/base.Dockerfile b/base.Dockerfile
+index ff60d7d79f..b68c695964 100644
+--- a/base.Dockerfile
++++ b/base.Dockerfile
+@@ -1,44 +1,14 @@
+-FROM debian:stretch
++FROM openjdk:8-stretch
+ 
+-RUN echo "deb http://http.debian.net/debian stretch-backports main" | \
+-     tee --append /etc/apt/sources.list.d/stretch-backports.list > /dev/null && \ 
+-     apt-get update -y && \
+-     apt-get install -y \
+-     wget \
+-     curl \
+-     ruby \
+-     ruby-dev \
+-     rubygems \
+-     build-essential \
+-     git-core && \
+-     apt-get install -y -t stretch-backports openjdk-8-jdk && \
+-     update-java-alternatives -s java-1.8.0-openjdk-amd64 && \
+-     apt-get upgrade -y
++ARG ANT_VERSION
+ 
+-RUN export JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-amd64
++RUN wget --no-check-certificate --no-cookies https://archive.apache.org/dist/ant/binaries/apache-ant-${ANT_VERSION}-bin.tar.gz \
++    && wget --no-check-certificate --no-cookies https://archive.apache.org/dist/ant/binaries/apache-ant-${ANT_VERSION}-bin.tar.gz.sha512 \
++    && echo "$(cat apache-ant-${ANT_VERSION}-bin.tar.gz.sha512) apache-ant-${ANT_VERSION}-bin.tar.gz" | sha512sum -c \
++    && tar -zvxf apache-ant-${ANT_VERSION}-bin.tar.gz -C /opt/ \
++    && ln -s /opt/apache-ant-${ANT_VERSION} /opt/ant \
++    && rm -f apache-ant-${ANT_VERSION}-bin.tar.gz \
++    && rm -f apache-ant-${ANT_VERSION}-bin.tar.gz.sha512
+ 
+-RUN gem install fpm
+-RUN fpm --version
+-
+-#Installing Apache Ant
+-RUN wget http://archive.apache.org/dist/ant/binaries/apache-ant-1.10.5-bin.tar.gz
+-RUN wget https://www.apache.org/dist/ant/KEYS
+-RUN wget https://archive.apache.org/dist/ant/binaries/apache-ant-1.10.5-bin.tar.gz.asc
+-
+-#Verify download signature
+-RUN gpg --import KEYS
+-RUN gpg --verify apache-ant-1.10.5-bin.tar.gz.asc
+-
+-#Unpack
+-RUN tar xvfvz apache-ant-1.10.5-bin.tar.gz
+-
+-RUN mv apache-ant-1.10.5 /opt/ant
+-RUN echo ANT_HOME=/opt/ant >> /etc/environment
+-RUN ln -s /opt/ant/bin/ant /usr/bin/ant
+-
+-#Installing Apache Ivy from git repository
+-RUN git clone https://git-wip-us.apache.org/repos/asf/ant-ivy.git
+-WORKDIR /ant-ivy
+-RUN ant jar
+-WORKDIR /ant-ivy/build/artifact/jars
+-RUN scp ivy.jar /opt/ant/lib
++RUN update-alternatives --install "/usr/bin/ant" "ant" "/opt/ant/bin/ant" 1 && \
++    update-alternatives --set "ant" "/opt/ant/bin/ant"
+diff --git a/versions.json b/versions.json
+index 78c87a9191..67f906cd1c 100644
+--- a/versions.json
++++ b/versions.json
+@@ -1,4 +1,4 @@
+ {
+   "version": "7.7.2",
+-  "major_version": "7"
++  "ant_version": "1.10.5"
+ }
+-- 
+2.32.1 (Apple Git-133)
+
