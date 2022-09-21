@@ -27,6 +27,7 @@ import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.SortedDocValues;
 import org.apache.lucene.index.SortedSetDocValues;
+import org.apache.lucene.search.ScoreMode;
 import org.apache.lucene.search.SimpleCollector;
 import org.apache.lucene.util.BitUtil;
 import org.apache.lucene.util.BytesRef;
@@ -34,6 +35,7 @@ import org.apache.solr.common.SolrException;
 import org.apache.solr.common.util.SimpleOrderedMap;
 import org.apache.solr.schema.SchemaField;
 import org.apache.solr.search.DocSetUtil;
+import org.apache.solr.search.facet.SlotAcc.CountSlotAcc;
 import org.apache.solr.search.facet.SlotAcc.SlotContext;
 
 /**
@@ -188,7 +190,7 @@ class FacetFieldProcessorByHashDVString extends FacetFieldProcessor {
         SortedSetDocValues values = null;
         HashMap<Long, BytesRef> segOrdinalValueCache; // avoid repeated lookups of the same ordinal, in this seg
 
-        @Override public boolean needsScores() { return false; }
+        @Override public ScoreMode scoreMode() { return ScoreMode.COMPLETE_NO_SCORES; }
 
         @Override
         protected void doSetNextReader(LeafReaderContext ctx) throws IOException {
@@ -223,7 +225,7 @@ class FacetFieldProcessorByHashDVString extends FacetFieldProcessor {
         SortedDocValues values = null;
         HashMap<Integer, BytesRef> segOrdinalValueCache; // avoid repeated lookups of the same ordinal, in this seg
 
-        @Override public boolean needsScores() { return false; }
+        @Override public ScoreMode scoreMode() { return ScoreMode.COMPLETE_NO_SCORES; }
 
         @Override
         protected void doSetNextReader(LeafReaderContext ctx) throws IOException {

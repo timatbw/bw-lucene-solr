@@ -12,6 +12,7 @@ import org.apache.solr.common.util.SimpleOrderedMap;
 import org.apache.solr.search.FunctionQParser;
 import org.apache.solr.search.SyntaxError;
 import org.apache.solr.search.ValueSourceParser;
+import org.apache.solr.search.facet.SlotAcc.FuncSlotAcc;
 import org.roaringbitmap.buffer.ImmutableRoaringBitmap;
 import org.roaringbitmap.buffer.MutableRoaringBitmap;
 

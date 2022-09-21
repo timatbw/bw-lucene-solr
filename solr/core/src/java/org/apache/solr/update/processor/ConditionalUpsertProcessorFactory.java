@@ -116,14 +116,21 @@ public class ConditionalUpsertProcessorFactory extends UpdateRequestProcessorFac
       if (phase == DistributedUpdateProcessor.DistribPhase.FROMLEADER) {
         return false;
       }
-      return distribProc.isLeader(cmd);
+      distribProc.setupRequest(cmd);
+      return distribProc.isLeader();
     }
 
     @Override
     public void processAdd(AddUpdateCommand cmd) throws IOException {
       if (!ignoreConditionalUpserts && !conditions.isEmpty() && isLeader(cmd)) {
         BytesRef indexedDocId = cmd.getIndexedId();
-        SolrInputDocument oldDoc = RealTimeGetComponent.getInputDocument(core, indexedDocId);
+        SolrInputDocument oldDoc = RealTimeGetComponent.getInputDocument(
+            core,
+            indexedDocId,
+            indexedDocId,
+            null,
+            null,
+            RealTimeGetComponent.Resolution.DOC);
         SolrInputDocument newDoc = cmd.getSolrInputDocument();
         if (!UpsertCondition.shouldInsertOrUpsert(conditions, oldDoc, newDoc)) {
           return;
