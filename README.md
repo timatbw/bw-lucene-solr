@@ -15,6 +15,8 @@
     limitations under the License.
  -->
 
+![Tests](https://github.com/BrandwatchLtd/bw-lucene-solr/actions/workflows/tests.yml/badge.svg)
+
 # Apache Lucene and Solr
 
 Apache Lucene is a high-performance, full featured text search engine library
