@@ -1263,8 +1263,8 @@ public class TestJsonFacets extends SolrTestCaseHS {
         )
         , "facets=={" +
             "  'count':6," +
-            "  'topA': {'numFound':2, 'start':0, 'docs': [{'id':'1', 'mynum':4.0}, {'id':'4', 'mynum':2.0}]}," +
-            "  'topB': {'numFound':3, 'start':0, 'docs': [{'id':'5', 'mynum':11.0}, {'id':'6', 'mynum':-5.0}, {'id':'2', 'mynum':-9.0}]}" +
+            "  'topA': {'numFound':2, 'start':0, 'numFoundExact': true, 'docs': [{'id':'1', 'mynum':4.0}, {'id':'4', 'mynum':2.0}]}," +
+            "  'topB': {'numFound':3, 'start':0, 'numFoundExact': true, 'docs': [{'id':'5', 'mynum':11.0}, {'id':'6', 'mynum':-5.0}, {'id':'2', 'mynum':-9.0}]}" +
             "}"
     );
 
