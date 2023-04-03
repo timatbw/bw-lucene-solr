@@ -62,6 +62,12 @@ class FacetQueryProcessor extends FacetProcessor<FacetQuery> {
       // FIXME - what needs to be done here?
     }
     response = new SimpleOrderedMap<>();
+    // TODO add a cache in FacetRequest that maps slotNum->DocSet, use computeIfAbsent and run fcontext.searcher.getDocSet with q and top-level base.
+    // TODO cannot use parent because of sub-sub-facets. Need to get the base from the top-level one (without a parent)
+    // TODO then get this and intersect with fcontext.base to use as resulting docset
+    int parentBaseSize = fcontext.parent != null ? fcontext.parent.base.size() : 0;
+    System.out.println("TPO doing FacetQuery.process for freq=" + System.identityHashCode(freq) + " q=" + freq.q + " in context fcontext.filter=" + fcontext.filter
+        + " and base size=" + fcontext.base.size() + " and parent=" + fcontext.parent + " and parentBaseSize=" + parentBaseSize);
     fillBucket(response, freq.q, null, (fcontext.flags & FacetContext.SKIP_FACET)!=0, fcontext.facetInfo);
   }
 

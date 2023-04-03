@@ -521,6 +521,13 @@ abstract class FacetFieldProcessor extends FacetProcessor<FacetField> {
 
     assert null != slot.bucketFilter;
     final Query filter = slot.bucketFilter;
+    // TODO use cache to get this. Note: this will only be run if there are subfacets or metrics, and will only
+    // TODO benefit from caching if it's a subfacet itself, so will only be faster if it's in the middle of a 3 level faceting/metrics.
+    // TODO also note, if filter is not cached, it's relatively cheap to run because it's a single Term, which is handled
+    // TODO specially: see DocSetUtil.createDocSet
+    int parentBaseSize = fcontext.parent != null ? fcontext.parent.base.size() : 0;
+    System.out.println("TPO doing FacetFieldProcessor.fillBucketFromSlot for freq=" + System.identityHashCode(freq) + " q=" + slot.bucketFilter + " in context fcontext.filter=" + fcontext.filter
+        + " and base size=" + fcontext.base.size() + " and parent=" + fcontext.parent + " and parentBaseSize=" + parentBaseSize);
     final DocSet subDomain = fcontext.searcher.getDocSet(filter, fcontext.base);
 
     // if no subFacets, we only need a DocSet

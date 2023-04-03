@@ -532,6 +532,9 @@ class FacetRangeProcessor extends FacetProcessor<FacetRange> {
       }
     }
     // TODO: specialize count only
+    int parentBaseSize = fcontext.parent != null ? fcontext.parent.base.size() : 0;
+    System.out.println("TPO doing FacetRangeProcessor.rangeStats object=" + System.identityHashCode(this) + " for slot=" + slot + " freq=" + System.identityHashCode(freq) + " rangeQ=" + rangeQ + " in context fcontext.filter=" + fcontext.filter
+        + " and fcontext.base.size=" + fcontext.base.size() + " and parent=" + fcontext.parent + " and parentBaseSize=" + parentBaseSize);
     DocSet intersection = fcontext.searcher.getDocSet(rangeQ, fcontext.base);
     if (hasSubFacets) {
       filters[slot] = rangeQ;
