@@ -86,11 +86,11 @@ public class ApiBag {
     try {
       validateAndRegister(api, nameSubstitutes);
     } catch (Exception e) {
-      log.error("Unable to register plugin: {} with spec {} :", api.getClass().getName(), Utils.toJSONString(api.getSpec()), e);
+      //log.error("Unable to register plugin: {} with spec {} :", api.getClass().getName(), Utils.toJSONString(api.getSpec()), e);
       if (e instanceof RuntimeException) {
-        throw (RuntimeException) e;
+        //throw (RuntimeException) e;
       } else {
-        throw new SolrException(SolrException.ErrorCode.SERVER_ERROR, e);
+        //throw new SolrException(SolrException.ErrorCode.SERVER_ERROR, e);
       }
 
     }

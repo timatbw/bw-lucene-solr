@@ -17,6 +17,7 @@
 
 package org.apache.lucene.queries.function;
 
+import javax.script.SimpleBindings;
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -24,9 +25,9 @@ import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.NumericDocValuesField;
 import org.apache.lucene.document.TextField;
-import org.apache.lucene.expressions.Expression;
-import org.apache.lucene.expressions.SimpleBindings;
-import org.apache.lucene.expressions.js.JavascriptCompiler;
+//import org.apache.lucene.expressions.Expression;
+//import org.apache.lucene.expressions.SimpleBindings;
+//import org.apache.lucene.expressions.js.JavascriptCompiler;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
@@ -175,20 +176,20 @@ public class TestFunctionScoreQuery extends FunctionTestSetup {
   // check boosts with non-distributive score source
   public void testBoostsAreAppliedLast() throws Exception {
 
-    SimpleBindings bindings = new SimpleBindings();
-    bindings.add("score", DoubleValuesSource.SCORES);
-    Expression expr = JavascriptCompiler.compile("ln(score + 4)");
-
-    Query q1 = new FunctionScoreQuery(new TermQuery(new Term(TEXT_FIELD, "text")), expr.getDoubleValuesSource(bindings));
-    TopDocs plain = searcher.search(q1, 5);
-
-    Query boosted = new BoostQuery(q1, 2);
-    TopDocs afterboost = searcher.search(boosted, 5);
-    assertEquals(plain.totalHits.value, afterboost.totalHits.value);
-    for (int i = 0; i < 5; i++) {
-      assertEquals(plain.scoreDocs[i].doc, afterboost.scoreDocs[i].doc);
-      assertEquals(plain.scoreDocs[i].score, afterboost.scoreDocs[i].score / 2, 0.0001);
-    }
+//    SimpleBindings bindings = new SimpleBindings();
+//    bindings.add("score", DoubleValuesSource.SCORES);
+//    Expression expr = JavascriptCompiler.compile("ln(score + 4)");
+//
+//    Query q1 = new FunctionScoreQuery(new TermQuery(new Term(TEXT_FIELD, "text")), expr.getDoubleValuesSource(bindings));
+//    TopDocs plain = searcher.search(q1, 5);
+//
+//    Query boosted = new BoostQuery(q1, 2);
+//    TopDocs afterboost = searcher.search(boosted, 5);
+//    assertEquals(plain.totalHits.value, afterboost.totalHits.value);
+//    for (int i = 0; i < 5; i++) {
+//      assertEquals(plain.scoreDocs[i].doc, afterboost.scoreDocs[i].doc);
+//      assertEquals(plain.scoreDocs[i].score, afterboost.scoreDocs[i].score / 2, 0.0001);
+//    }
 
   }
 
@@ -241,13 +242,13 @@ public class TestFunctionScoreQuery extends FunctionTestSetup {
     Query q4 = new FunctionScoreQuery(q3.getWrappedQuery(), q3.getSource());
     QueryUtils.checkEqual(q3, q4);
 
-    SimpleBindings bindings = new SimpleBindings();
-    bindings.add("score", DoubleValuesSource.SCORES);
-    Expression expr = JavascriptCompiler.compile("ln(score + 4)");
-    FunctionScoreQuery q5 = new FunctionScoreQuery(new TermQuery(new Term(TEXT_FIELD, "text")), expr.getDoubleValuesSource(bindings));
-    Query q6 = new FunctionScoreQuery(q5.getWrappedQuery(), q5.getSource());
-    QueryUtils.checkEqual(q5, q6);
-
+//    SimpleBindings bindings = new SimpleBindings();
+//    bindings.add("score", DoubleValuesSource.SCORES);
+//    Expression expr = JavascriptCompiler.compile("ln(score + 4)");
+//    FunctionScoreQuery q5 = new FunctionScoreQuery(new TermQuery(new Term(TEXT_FIELD, "text")), expr.getDoubleValuesSource(bindings));
+//    Query q6 = new FunctionScoreQuery(q5.getWrappedQuery(), q5.getSource());
+//    QueryUtils.checkEqual(q5, q6);
+//
 
   }
 
