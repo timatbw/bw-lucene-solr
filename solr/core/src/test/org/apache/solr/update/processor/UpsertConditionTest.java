@@ -631,7 +631,6 @@ public class UpsertConditionTest {
     assertThat(newDoc.getFieldValue("field"), is("left-alone"));
   }
 
-
   @Test
   public void givenNullify_whenRunning() {
     NamedList<String> args = namedList(ImmutableListMultimap.of(
@@ -656,6 +655,263 @@ public class UpsertConditionTest {
     assertThat(newDoc.getFieldValue("other_field"), nullValue());
     assertThat(newDoc.getField("field"), notNullValue());
     assertThat(newDoc.getFieldValue("left-alone"), is("not-null"));
+  }
+
+  @Test
+  public void givenConcat_whenRunning() {
+    NamedList<String> args = namedList(ImmutableListMultimap.of(
+        "must_not", "NEW.derived_field:*",
+        "action", "concat:derived_field:field,other_field"
+    ));
+
+    UpsertCondition condition = UpsertCondition.parse("concat", args);
+
+    assertThat(condition.getName(), is("concat"));
+
+    {
+      SolrInputDocument newDoc = new SolrInputDocument();
+      newDoc.setField("field", "Red");
+      newDoc.setField("other_field", "Blue");
+
+      assertTrue(condition.matches(null, newDoc));
+      assertThat(condition.run(null, newDoc), is(UpsertCondition.ActionType.CONCAT));
+
+      assertThat(newDoc.getFieldValue("derived_field"), is("RedBlue"));
+      assertThat(newDoc.getFieldValue("field"), is("Red"));
+      assertThat(newDoc.getFieldValue("other_field"), is("Blue"));
+    }
+
+    {
+      SolrInputDocument newDoc2 = new SolrInputDocument();
+      newDoc2.setField("derived_field", "AlreadySet");
+      assertFalse(condition.matches(null, newDoc2));
+    }
+  }
+
+  @Test
+  public void givenConcatLowercase_whenRunning() {
+    NamedList<String> args = namedList(ImmutableListMultimap.of(
+        "must_not", "NEW.derived_field:*",
+        "action", "concat_lc:derived_field:field,other_field,maybe_third?"
+    ));
+
+    UpsertCondition condition = UpsertCondition.parse("concat", args);
+
+    {
+      SolrInputDocument docWithAllFields = new SolrInputDocument();
+      docWithAllFields.setField("field", "Red");
+      docWithAllFields.setField("other_field", "Blue");
+      docWithAllFields.setField("maybe_third", "Green");
+
+      assertTrue(condition.matches(null, docWithAllFields));
+      assertThat(condition.run(null, docWithAllFields), is(UpsertCondition.ActionType.CONCAT_LC));
+
+      assertThat(docWithAllFields.getFieldValue("derived_field"), is("redbluegreen"));
+      assertThat(docWithAllFields.getFieldValue("field"), is("Red"));
+      assertThat(docWithAllFields.getFieldValue("other_field"), is("Blue"));
+      assertThat(docWithAllFields.getFieldValue("maybe_third"), is("Green"));
+    }
+
+    {
+      SolrInputDocument docAlreadySetsDerived = new SolrInputDocument();
+      docAlreadySetsDerived.setField("derived_field", "AlreadySet");
+      assertFalse(condition.matches(null, docAlreadySetsDerived));
+    }
+
+    {
+      SolrInputDocument docWithoutOptional = new SolrInputDocument();
+      docWithoutOptional.setField("field", "Yellow");
+      docWithoutOptional.setField("other_field", "Orange");
+
+      assertTrue(condition.matches(null, docWithoutOptional));
+      assertThat(condition.run(null, docWithoutOptional), is(UpsertCondition.ActionType.CONCAT_LC));
+      assertThat(docWithoutOptional.getFieldValue("derived_field"), is("yelloworange"));
+    }
+
+    {
+      SolrInputDocument docWithoutRequired = new SolrInputDocument();
+      docWithoutRequired.setField("field", "Yellow");
+
+      assertTrue(condition.matches(null, docWithoutRequired));
+      assertThat(condition.run(null, docWithoutRequired), is(UpsertCondition.ActionType.CONCAT_LC));
+      assertThat(docWithoutRequired.getFieldValue("derived_field"), nullValue());
+    }
+  }
+
+  @Test
+  public void givenConcatWithFallbacks_whenRunning() {
+    NamedList<String> args = namedList(ImmutableListMultimap.of(
+        "must_not", "NEW.derived_field:*",
+        "action", "concat:derived_field:maybe_prefix?,main_field|fallback_field|last_resort,maybe_suffix?"
+    ));
+
+    UpsertCondition condition = UpsertCondition.parse("concat", args);
+
+    {
+      SolrInputDocument mainPresent = new SolrInputDocument();
+      mainPresent.setField("main_field", "Red");
+      mainPresent.setField("last_resort", "Blue");
+      assertTrue(condition.matches(null, mainPresent));
+      assertThat(condition.run(null, mainPresent), is(UpsertCondition.ActionType.CONCAT));
+      assertThat(mainPresent.getFieldValue("derived_field"), is("Red"));
+    }
+
+    {
+      SolrInputDocument mainAbsent = new SolrInputDocument();
+      mainAbsent.setField("fallback_field", "Green");
+      mainAbsent.setField("last_resort", "Blue");
+      assertTrue(condition.matches(null, mainAbsent));
+      assertThat(condition.run(null, mainAbsent), is(UpsertCondition.ActionType.CONCAT));
+      assertThat(mainAbsent.getFieldValue("derived_field"), is("Green"));
+    }
+
+    {
+      SolrInputDocument onlyLast = new SolrInputDocument();
+      onlyLast.setField("last_resort", "Blue");
+      assertTrue(condition.matches(null, onlyLast));
+      assertThat(condition.run(null, onlyLast), is(UpsertCondition.ActionType.CONCAT));
+      assertThat(onlyLast.getFieldValue("derived_field"), is("Blue"));
+    }
+
+    {
+      SolrInputDocument preAndPost = new SolrInputDocument();
+      preAndPost.setField("fallback_field", "Green");
+      preAndPost.setField("maybe_prefix", "pre");
+      preAndPost.setField("maybe_suffix", "post");
+      assertTrue(condition.matches(null, preAndPost));
+      assertThat(condition.run(null, preAndPost), is(UpsertCondition.ActionType.CONCAT));
+      assertThat(preAndPost.getFieldValue("derived_field"), is("preGreenpost"));
+    }
+
+    {
+      SolrInputDocument onlyPreAndPost = new SolrInputDocument();
+      onlyPreAndPost.setField("maybe_prefix", "pre");
+      onlyPreAndPost.setField("maybe_suffix", "post");
+      assertTrue(condition.matches(null, onlyPreAndPost));
+      assertThat(condition.run(null, onlyPreAndPost), is(UpsertCondition.ActionType.CONCAT));
+      assertThat(onlyPreAndPost.getFieldValue("derived_field"), nullValue());
+    }
+  }
+
+  @Test
+  public void givenConcatWithOldDoc_whenRunning() {
+    NamedList<String> args = namedList(ImmutableListMultimap.of(
+        "must_not", "NEW.sku:*",
+        "action", "concat:sku:model_name|product_range,colour,size?"
+    ));
+
+    UpsertCondition condition = UpsertCondition.parse("concat", args);
+
+    {
+      SolrInputDocument newDoc = new SolrInputDocument();
+      newDoc.setField("model_name", "Macbook");
+      SolrInputDocument oldDoc = new SolrInputDocument();
+      oldDoc.setField("model_name", "Powerbook");
+      oldDoc.setField("colour", "Silver");
+      oldDoc.setField("sku", "PowerbookSilver");
+      assertTrue(condition.matches(oldDoc, newDoc));
+      assertThat(condition.run(oldDoc, newDoc), is(UpsertCondition.ActionType.CONCAT));
+      assertThat(newDoc.getFieldValue("sku"), is("MacbookSilver"));
+    }
+
+    {
+      SolrInputDocument newDoc = new SolrInputDocument();
+      newDoc.setField("model_name", "Macbook");
+      newDoc.setField("sku", "CustomOverride");
+      SolrInputDocument oldDoc = new SolrInputDocument();
+      oldDoc.setField("model_name", "Powerbook");
+      oldDoc.setField("colour", "Black");
+      oldDoc.setField("sku", "PowerbookBlack");
+      assertFalse(condition.matches(oldDoc, newDoc));
+    }
+
+    {
+      SolrInputDocument newDoc = new SolrInputDocument();
+      newDoc.setField("colour", "Grey");
+      newDoc.setField("product_range", "Laptop");
+      SolrInputDocument oldDoc = new SolrInputDocument();
+      oldDoc.setField("model_name", "Powerbook");
+      oldDoc.setField("colour", "Silver");
+      oldDoc.setField("size", "13in");
+      oldDoc.setField("sku", "PowerbookSilver13in");
+      assertTrue(condition.matches(oldDoc, newDoc));
+      assertThat(condition.run(oldDoc, newDoc), is(UpsertCondition.ActionType.CONCAT));
+      assertThat(newDoc.getFieldValue("sku"), is("PowerbookGrey13in"));
+      // prefers old.model_name to new.product_range fallback
+    }
+
+    {
+      SolrInputDocument newDoc = new SolrInputDocument();
+      newDoc.setField("product_range", "Laptop");
+      newDoc.setField("size", "16in");
+      SolrInputDocument oldDoc = new SolrInputDocument();
+      oldDoc.setField("colour", "Silver");
+      oldDoc.setField("size", "17in");
+      oldDoc.setField("sku", "PowerbookSilver17in");
+      assertTrue(condition.matches(oldDoc, newDoc));
+      assertThat(condition.run(oldDoc, newDoc), is(UpsertCondition.ActionType.CONCAT));
+      assertThat(newDoc.getFieldValue("sku"), is("LaptopSilver16in"));
+      // fallback to new.product_range since model_name unavailable in old and new
+    }
+
+    {
+      SolrInputDocument newDoc = new SolrInputDocument();
+      newDoc.setField("size", "16in");
+      SolrInputDocument oldDoc = new SolrInputDocument();
+      oldDoc.setField("colour", "Silver");
+      oldDoc.setField("size", "17in");
+      oldDoc.setField("sku", "PowerbookSilver17in");
+      assertTrue(condition.matches(oldDoc, newDoc));
+      assertThat(condition.run(oldDoc, newDoc), is(UpsertCondition.ActionType.CONCAT));
+      assertThat(newDoc.getFieldValue("sku"), nullValue());
+      // both product_range and model_name unavailable in old and new
+    }
+  }
+
+  @Test
+  public void givenConcatWithAtomicUpdates_whenRunning() {
+    NamedList<String> args = namedList(ImmutableListMultimap.of(
+        "must_not", "NEW.sku:*",
+        "action", "concat:sku:model_name|product_range,colour,size?"
+    ));
+
+    UpsertCondition condition = UpsertCondition.parse("concat", args);
+
+    {
+      SolrInputDocument newDoc = new SolrInputDocument();
+      newDoc.setField("model_name", Collections.singletonMap("set", "Macbook"));
+      SolrInputDocument oldDoc = new SolrInputDocument();
+      oldDoc.setField("model_name", "Powerbook");
+      oldDoc.setField("colour", "Silver");
+      oldDoc.setField("sku", "PowerbookSilver");
+      assertTrue(condition.matches(oldDoc, newDoc));
+      assertThat(condition.run(oldDoc, newDoc), is(UpsertCondition.ActionType.CONCAT));
+      assertThat(newDoc.getFieldValue("sku"), is("MacbookSilver"));
+    }
+
+    {
+      SolrInputDocument newDoc = new SolrInputDocument();
+      newDoc.setField("unrelated_field", Collections.singletonMap("set", "English"));
+      newDoc.setField("size", Collections.singletonMap("set", "12in"));
+      SolrInputDocument oldDoc = new SolrInputDocument();
+      oldDoc.setField("model_name", "Powerbook");
+      oldDoc.setField("colour", "Silver");
+      oldDoc.setField("sku", "PowerbookSilver");
+      assertTrue(condition.matches(oldDoc, newDoc));
+      assertThat(condition.run(oldDoc, newDoc), is(UpsertCondition.ActionType.CONCAT));
+      assertThat(newDoc.getFieldValue("sku"), is("PowerbookSilver12in"));
+    }
+
+    {
+      SolrInputDocument newDoc = new SolrInputDocument();
+      newDoc.setField("size", Collections.singletonMap("set", "12in"));
+      SolrInputDocument oldDoc = new SolrInputDocument();
+      oldDoc.setField("model_name", "Powerbook");
+      oldDoc.setField("sku", "PowerbookSilver");
+      assertTrue(condition.matches(oldDoc, newDoc));
+      assertThat(condition.run(oldDoc, newDoc), is(UpsertCondition.ActionType.CONCAT));
+      assertThat(newDoc.getFieldValue("sku"), nullValue());
+    }
   }
 
   @Test
