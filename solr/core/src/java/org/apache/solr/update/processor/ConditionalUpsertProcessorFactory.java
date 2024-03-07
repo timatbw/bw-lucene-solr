@@ -20,7 +20,6 @@ import java.io.IOException;
 import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 import org.apache.lucene.util.BytesRef;
 import org.apache.solr.common.SolrException;
