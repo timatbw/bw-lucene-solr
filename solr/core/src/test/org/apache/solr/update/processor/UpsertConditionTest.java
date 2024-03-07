@@ -443,6 +443,64 @@ public class UpsertConditionTest {
   }
 
   @Test
+  public void givenMultipleShouldAndMustNotClauses_whenMatching() {
+    NamedList<String> args = namedList(ImmutableListMultimap.of(
+        "should", "NEW.field1:*",
+        "should", "NEW.field2:*",
+        "must_not", "NEW.field3:*",
+        "action", "skip"
+    ));
+
+    UpsertCondition condition = UpsertCondition.parse("skip-it", args);
+
+    assertThat(condition.getName(), is("skip-it"));
+
+    {
+      SolrInputDocument newDoc = new SolrInputDocument();
+      assertFalse(condition.matches(null, newDoc));
+    }
+
+    {
+      SolrInputDocument newDoc = new SolrInputDocument();
+      newDoc.setField("field3", "anything");
+      assertFalse(condition.matches(null, newDoc));
+    }
+
+    {
+      SolrInputDocument newDoc = new SolrInputDocument();
+      newDoc.setField("field2", "anything");
+      assertTrue(condition.matches(null, newDoc));
+    }
+
+    {
+      SolrInputDocument newDoc = new SolrInputDocument();
+      newDoc.setField("field1", "anything");
+      newDoc.setField("field2", "anything-else");
+      assertTrue(condition.matches(null, newDoc));
+    }
+
+    {
+      SolrInputDocument newDoc = new SolrInputDocument();
+      newDoc.setField("field2", "anything");
+      newDoc.setField("field3", "stuff");
+      assertFalse(condition.matches(null, newDoc));
+    }
+
+    {
+      SolrInputDocument newDoc = new SolrInputDocument();
+      newDoc.setField("field99", "anything");
+      assertFalse(condition.matches(null, newDoc));
+    }
+
+    {
+      SolrInputDocument newDoc = new SolrInputDocument();
+      newDoc.setField("field99", "anything");
+      newDoc.setField("field3", "stuff");
+      assertFalse(condition.matches(null, newDoc));
+    }
+  }
+
+  @Test
   public void givenMustAndMustNotClauses_whenMatching() {
     NamedList<String> args = namedList(ImmutableListMultimap.of(
         "must", "OLD.field1:value1",
@@ -856,6 +914,20 @@ public class UpsertConditionTest {
 
     {
       SolrInputDocument newDoc = new SolrInputDocument();
+      newDoc.setField("colour", "Grey");
+      SolrInputDocument oldDoc = new SolrInputDocument();
+      oldDoc.setField("product_range", "Laptop");
+      oldDoc.setField("colour", "Silver");
+      oldDoc.setField("size", "17in");
+      oldDoc.setField("sku", "PowerbookSilver17in");
+      assertTrue(condition.matches(oldDoc, newDoc));
+      assertThat(condition.run(oldDoc, newDoc), is(UpsertCondition.ActionType.CONCAT));
+      assertThat(newDoc.getFieldValue("sku"), is("LaptopGrey17in"));
+      // fallback to old.product_range since model_name unavailable in old and new
+    }
+
+    {
+      SolrInputDocument newDoc = new SolrInputDocument();
       newDoc.setField("size", "16in");
       SolrInputDocument oldDoc = new SolrInputDocument();
       oldDoc.setField("colour", "Silver");
@@ -870,10 +942,15 @@ public class UpsertConditionTest {
 
   @Test
   public void givenConcatWithAtomicUpdates_whenRunning() {
-    NamedList<String> args = namedList(ImmutableListMultimap.of(
-        "must_not", "NEW.sku:*",
-        "action", "concat:sku:model_name|product_range,colour,size?"
-    ));
+    NamedList<String> args = namedList(ImmutableListMultimap.<String, String>builder()
+        .put("should", "NEW.model_name:*")
+        .put("should", "NEW.product_range:*")
+        .put("should", "NEW.colour:*")
+        .put("should", "NEW.size:*")
+        .put("must_not", "NEW.sku:*")
+        .put("action", "concat:sku:model_name|product_range,colour,size?")
+        .build()
+    );
 
     UpsertCondition condition = UpsertCondition.parse("concat", args);
 
@@ -904,6 +981,16 @@ public class UpsertConditionTest {
 
     {
       SolrInputDocument newDoc = new SolrInputDocument();
+      newDoc.setField("unrelated_field", Collections.singletonMap("set", "English"));
+      SolrInputDocument oldDoc = new SolrInputDocument();
+      oldDoc.setField("model_name", "Powerbook");
+      oldDoc.setField("colour", "Silver");
+      oldDoc.setField("sku", "PowerbookSilver");
+      assertFalse(condition.matches(oldDoc, newDoc));
+    }
+
+    {
+      SolrInputDocument newDoc = new SolrInputDocument();
       newDoc.setField("size", Collections.singletonMap("set", "12in"));
       SolrInputDocument oldDoc = new SolrInputDocument();
       oldDoc.setField("model_name", "Powerbook");
@@ -911,6 +998,58 @@ public class UpsertConditionTest {
       assertTrue(condition.matches(oldDoc, newDoc));
       assertThat(condition.run(oldDoc, newDoc), is(UpsertCondition.ActionType.CONCAT));
       assertThat(newDoc.getFieldValue("sku"), nullValue());
+    }
+  }
+
+  @Test
+  public void givenConcatWithMultipleConditions_whenRunning() {
+    NamedList<?> args = namedList(ImmutableListMultimap.<String, NamedList<String>>builder()
+        .put("modelBased", namedList(ImmutableListMultimap.of(
+            "must_not", "NEW.sku:*",
+            "action", "concat:sku:model_name,colour,size?"
+        )))
+        .put("productBased", namedList(ImmutableListMultimap.of(
+            "must_not", "NEW.sku:*",
+            "action", "concat:sku:product_range,colour,size?"
+        )))
+        .build()
+    );
+
+    final List<UpsertCondition> conditions = UpsertCondition.readConditions(args);
+
+    {
+      SolrInputDocument newDoc = new SolrInputDocument();
+      newDoc.setField("model_name", Collections.singletonMap("set", "Macbook"));
+      newDoc.setField("product_range", Collections.singletonMap("set", "Laptop"));
+      SolrInputDocument oldDoc = new SolrInputDocument();
+      oldDoc.setField("model_name", "Powerbook");
+      oldDoc.setField("colour", "Silver");
+      oldDoc.setField("sku", "PowerbookSilver");
+      assertThat(UpsertCondition.shouldInsertOrUpsert(conditions, oldDoc, newDoc), is(true));
+      assertThat(newDoc.getFieldValue("sku"), is("MacbookSilver"));
+      // does not go on to set sku using product_range because new.sku is set from first condition
+    }
+
+    {
+      SolrInputDocument newDoc = new SolrInputDocument();
+      newDoc.setField("product_range", Collections.singletonMap("set", "Laptop"));
+      SolrInputDocument oldDoc = new SolrInputDocument();
+      oldDoc.setField("colour", "Silver");
+      oldDoc.setField("sku", "PowerbookSilver");
+      assertThat(UpsertCondition.shouldInsertOrUpsert(conditions, oldDoc, newDoc), is(true));
+      assertThat(newDoc.getFieldValue("sku"), is("LaptopSilver"));
+      // first condition is not able to actually set new.sku so second condition matches
+    }
+
+    {
+      SolrInputDocument newDoc = new SolrInputDocument();
+      newDoc.setField("colour", Collections.singletonMap("set", "Black"));
+      SolrInputDocument oldDoc = new SolrInputDocument();
+      oldDoc.setField("colour", "Silver");
+      oldDoc.setField("sku", "PowerbookSilver");
+      assertThat(UpsertCondition.shouldInsertOrUpsert(conditions, oldDoc, newDoc), is(true));
+      assertThat(newDoc.getFieldValue("sku"), nullValue());
+      // neither condition was able to actually set new.sku
     }
   }
 
