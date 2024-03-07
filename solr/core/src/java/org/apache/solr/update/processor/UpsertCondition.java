@@ -140,6 +140,7 @@ class UpsertCondition {
   boolean matches(SolrInputDocument oldDoc, SolrInputDocument newDoc) {
     Docs docs = new Docs(oldDoc, newDoc);
     boolean atLeastOneMatched = false;
+    boolean hasPositive = false;
     for (FieldRule rule: rules) {
       boolean ruleMatched = rule.matches(docs);
       switch(rule.getOccur()) {
@@ -148,27 +149,28 @@ class UpsertCondition {
             return false;
           }
           atLeastOneMatched = true;
+          hasPositive = true;
           break;
         case MUST_NOT:
           if (ruleMatched) {
             return false;
           }
-          atLeastOneMatched = true;
           break;
         default:
           atLeastOneMatched = ruleMatched || atLeastOneMatched;
+          hasPositive = true;
           break;
       }
     }
-    return atLeastOneMatched;
+    return atLeastOneMatched || !hasPositive;
   }
 
   enum ActionType {
     UPSERT, // copy some/all fields from the OLD doc (when they don't exist on the new doc)
     RETAIN, // copy some/all fields from the OLD doc always
     NULLIFY, // make sure specific fields are null before doc written
-    CONCAT, // set a field to be the concatenation of other fields from NEW or OLD doc
-    CONCAT_LC, // set a field to be the lowercase concatenation of other fields from NEW or OLD doc
+    CONCAT, // attempt to set a field to be the concatenation of other fields from NEW or OLD doc
+    CONCAT_LC, // attempt to set a field to be the lowercase concatenation of other fields from NEW or OLD doc
     INSERT, // just do a regular insert as normal
     SKIP;   // entirely skip inserting the doc
   }
@@ -371,7 +373,7 @@ class UpsertCondition {
             // One of the required fields is not present, so we can't set the target field
             return;
           }
-          builder.append(type == ActionType.CONCAT_LC ? fieldValue.toLowerCase() : fieldValue);
+          builder.append(type == ActionType.CONCAT_LC ? fieldValue.toLowerCase(Locale.ROOT) : fieldValue);
         }
         newDoc.setField(target, builder.toString());
       }
