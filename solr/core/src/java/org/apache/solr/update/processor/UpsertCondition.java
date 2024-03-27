@@ -399,13 +399,13 @@ class UpsertCondition {
         return null;
       }
       Object fieldValue = doc.getFieldValue(fieldName);
-      if (fieldValue instanceof String) {
-        return (String)fieldValue;
+      if (fieldValue instanceof CharSequence) {
+        return fieldValue.toString();
       }
       if (fieldValue instanceof Map) {
         final Object setValue = ((Map)fieldValue).get("set");
-        if (setValue instanceof String) {
-          return (String)setValue;
+        if (setValue instanceof CharSequence) {
+          return setValue.toString();
         }
       }
       // Cannot support non-String types or collection (multi-valued field) types
