@@ -10,6 +10,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ListMultimap;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrInputDocument;
+import org.apache.solr.common.util.ByteArrayUtf8CharSequence;
 import org.apache.solr.common.util.NamedList;
 import org.junit.Test;
 
@@ -873,6 +874,19 @@ public class UpsertConditionTest {
     }
 
     {
+      // Same test but simulating how the javabin format encodes strings
+      SolrInputDocument newDoc = new SolrInputDocument();
+      newDoc.setField("model_name", new ByteArrayUtf8CharSequence("Macbook"));
+      SolrInputDocument oldDoc = new SolrInputDocument();
+      oldDoc.setField("model_name", "Powerbook");
+      oldDoc.setField("colour", "Silver");
+      oldDoc.setField("sku", "PowerbookSilver");
+      assertTrue(condition.matches(oldDoc, newDoc));
+      assertThat(condition.run(oldDoc, newDoc), is(UpsertCondition.ActionType.CONCAT));
+      assertThat(newDoc.getFieldValue("sku"), is("MacbookSilver"));
+    }
+
+    {
       SolrInputDocument newDoc = new SolrInputDocument();
       newDoc.setField("model_name", "Macbook");
       newDoc.setField("sku", "CustomOverride");
@@ -957,6 +971,20 @@ public class UpsertConditionTest {
     {
       SolrInputDocument newDoc = new SolrInputDocument();
       newDoc.setField("model_name", Collections.singletonMap("set", "Macbook"));
+      SolrInputDocument oldDoc = new SolrInputDocument();
+      oldDoc.setField("model_name", "Powerbook");
+      oldDoc.setField("colour", "Silver");
+      oldDoc.setField("sku", "PowerbookSilver");
+      assertTrue(condition.matches(oldDoc, newDoc));
+      assertThat(condition.run(oldDoc, newDoc), is(UpsertCondition.ActionType.CONCAT));
+      assertThat(newDoc.getFieldValue("sku"), is("MacbookSilver"));
+    }
+
+    {
+      // Same test but simulating how the javabin format encodes strings
+      SolrInputDocument newDoc = new SolrInputDocument();
+      newDoc.setField("model_name",
+          Collections.singletonMap("set", new ByteArrayUtf8CharSequence("Macbook")));
       SolrInputDocument oldDoc = new SolrInputDocument();
       oldDoc.setField("model_name", "Powerbook");
       oldDoc.setField("colour", "Silver");
