@@ -23,7 +23,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -158,7 +157,7 @@ public class NestedAtomicUpdateTest extends SolrTestCaseJ4 {
         "_root_", "1", "child_ss", new ArrayList<>(sdocs(existingChild)));
 
     SolrInputDocument updateDoc = sdoc("id", "1",
-        "child_ss", Collections.singletonMap("add", sdoc("id", "3", "cat_ss", Map.of("set", "child2")))); // an atomic update
+        "child_ss", Collections.singletonMap("add", sdoc("id", "3", "cat_ss", Collections.singletonMap("set", "child2")))); // an atomic update
 
     AtomicUpdateDocumentMerger docMerger = new AtomicUpdateDocumentMerger(req());
 
