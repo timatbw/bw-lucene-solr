@@ -165,6 +165,10 @@ public class NestedAtomicUpdateTest extends SolrTestCaseJ4 {
       docMerger.merge(updateDoc, existingDoc);
     });
     assertTrue(expected.getMessage().equals("A nested atomic update can only update an existing nested document"));
+
+    AtomicUpdateDocumentMerger docMergerSkipMissing = new AtomicUpdateDocumentMerger(req("skipUpdateIfMissing", "true"));
+    docMergerSkipMissing.merge(updateDoc, existingDoc); // no exception due to extra param
+    assertEquals(1, existingDoc.getFieldValues("child_ss").size());
   }
 
   @Test
