@@ -37,7 +37,7 @@ import org.apache.solr.schema.SchemaField;
  * Accumulates stats separated by slot number for the fields with {@link org.apache.lucene.index.DocValues}
  */
 public abstract class DocValuesAcc extends SlotAcc {
-  SchemaField sf;
+  protected SchemaField sf;
 
   public DocValuesAcc(FacetContext fcontext, SchemaField sf) throws IOException {
     super(fcontext);
