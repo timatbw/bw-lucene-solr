@@ -311,6 +311,22 @@ public class SkipExistingDocumentsProcessorFactoryTest {
   }
 
   @Test
+  public void testSkippableChildDocUpdateIsSkippedIfSkipUpdatesTrue() throws IOException {
+    UpdateRequestProcessor next = Mockito.mock(DistributedUpdateProcessor.class);
+    SkipExistingDocumentsUpdateProcessor processor
+        = Mockito.spy(new SkipExistingDocumentsUpdateProcessor(defaultRequest, next, false, true));
+
+    AddUpdateCommand cmd = Mockito.spy(createAtomicUpdateCmd(defaultRequest));
+    doReturn(true).when(processor).isLeader(cmd);
+    doReturn(false).when(processor).doesChildDocumentExist(cmd);
+    doReturn("123/child1").when(cmd).getChildDocIdStr();
+    doReturn("123").when(cmd).getIndexedIdStr();
+
+    processor.processAdd(cmd);
+    verify(next, never()).processAdd(cmd);
+  }
+
+  @Test
   public void testNonSkippableUpdateIsNotSkippedIfSkipUpdatesTrue() throws IOException {
     UpdateRequestProcessor next = Mockito.mock(DistributedUpdateProcessor.class);
     SkipExistingDocumentsUpdateProcessor processor
@@ -319,6 +335,22 @@ public class SkipExistingDocumentsProcessorFactoryTest {
     AddUpdateCommand cmd = createAtomicUpdateCmd(defaultRequest);
     doReturn(true).when(processor).isLeader(cmd);
     doReturn(true).when(processor).doesDocumentExist(docId);
+
+    processor.processAdd(cmd);
+    verify(next).processAdd(cmd);
+  }
+
+  @Test
+  public void testNonSkippableChildDocUpdateIsNotSkippedIfSkipUpdatesTrue() throws IOException {
+    UpdateRequestProcessor next = Mockito.mock(DistributedUpdateProcessor.class);
+    SkipExistingDocumentsUpdateProcessor processor
+        = Mockito.spy(new SkipExistingDocumentsUpdateProcessor(defaultRequest, next, false, true));
+
+    AddUpdateCommand cmd = Mockito.spy(createAtomicUpdateCmd(defaultRequest));
+    doReturn(true).when(processor).isLeader(cmd);
+    doReturn(true).when(processor).doesChildDocumentExist(cmd);
+    doReturn("123/child1").when(cmd).getChildDocIdStr();
+    doReturn("123").when(cmd).getIndexedIdStr();
 
     processor.processAdd(cmd);
     verify(next).processAdd(cmd);

@@ -182,7 +182,7 @@ public class SkipExistingDocumentsProcessorFactory extends UpdateRequestProcesso
       return this.skipUpdateIfMissing;
     }
 
-    boolean doesDocumentExist(BytesRef indexedDocId) throws IOException {
+    boolean doesDocumentExist(BytesRef indexedDocId) {
       assert null != indexedDocId;
 
       // we don't need any fields populated, we just need to know if the doc is in the tlog...
@@ -214,6 +214,17 @@ public class SkipExistingDocumentsProcessorFactory extends UpdateRequestProcesso
       }
     }
 
+    boolean doesChildDocumentExist(AddUpdateCommand cmd) throws IOException {
+      return RealTimeGetComponent.getInputDocument(
+          core,
+          core.getLatestSchema().indexableUniqueKey(cmd.getChildDocIdStr()),
+          cmd.getIndexedId(),
+          null,
+          null,
+          RealTimeGetComponent.Resolution.DOC
+      ) != null;
+    }
+
     boolean isLeader(UpdateCommand cmd) {
       if ((cmd.getFlags() & (UpdateCommand.REPLAY | UpdateCommand.PEER_SYNC)) != 0) {
         return false;
@@ -231,11 +242,6 @@ public class SkipExistingDocumentsProcessorFactory extends UpdateRequestProcesso
 
       boolean isUpdate = AtomicUpdateDocumentMerger.isAtomicUpdate(cmd);
 
-      // boolean existsByLookup = (RealTimeGetComponent.getInputDocument(core, indexedDocId) != null);
-      // if (docExists != existsByLookup) {
-      //   log.error("Found docExists {} but existsByLookup {} for doc {}", docExists, existsByLookup, indexedDocId.utf8ToString());
-      // }
-
       if (log.isDebugEnabled()) {
         log.debug("Document ID {} ... exists already? {} ... isAtomicUpdate? {} ... isLeader? {}",
                   indexedDocId.utf8ToString(), doesDocumentExist(indexedDocId), isUpdate, isLeader(cmd));
@@ -248,11 +254,20 @@ public class SkipExistingDocumentsProcessorFactory extends UpdateRequestProcesso
         return;
       }
 
-      if (skipUpdateIfMissing && isUpdate && isLeader(cmd) && !doesDocumentExist(indexedDocId)) {
-        if (log.isDebugEnabled()) {
-          log.debug("Skipping update to non-existent document ID {}", indexedDocId.utf8ToString());
+      if (skipUpdateIfMissing && isUpdate && isLeader(cmd)) {
+        if (!cmd.getChildDocIdStr().equals(cmd.getIndexedIdStr())) {
+          if (!doesChildDocumentExist(cmd)) {
+            if (log.isDebugEnabled()) {
+              log.debug("Skipping update to non-existent child document ID {}", cmd.getChildDocIdStr());
+            }
+            return;
+          }
+        } else if (!doesDocumentExist(indexedDocId)) {
+          if (log.isDebugEnabled()) {
+            log.debug("Skipping update to non-existent document ID {}", indexedDocId.utf8ToString());
+          }
+          return;
         }
-        return;
       }
 
       if (log.isDebugEnabled()) {
