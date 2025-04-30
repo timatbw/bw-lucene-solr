@@ -144,6 +144,8 @@ abstract class FacetParser<FacetRequestT extends FacetRequest> {
         return new FacetQueryParser(this, key).parse(args);
       case "range":
         return new FacetRangeParser(this, key).parse(args);
+      case "topdocs":
+        return TopDocsAgg.AggParser.parse(args);
       case "heatmap":
         return new FacetHeatmap.Parser(this, key).parse(args);
       case "func":

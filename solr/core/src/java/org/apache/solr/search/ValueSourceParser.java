@@ -56,6 +56,7 @@ import org.apache.solr.schema.StrField;
 import org.apache.solr.schema.TextField;
 import org.apache.solr.search.facet.AggValueSource;
 import org.apache.solr.search.facet.AvgAgg;
+import org.apache.solr.search.facet.BitmapCollectorAgg;
 import org.apache.solr.search.facet.CountAgg;
 import org.apache.solr.search.facet.CountValsAgg;
 import org.apache.solr.search.facet.HLLAgg;
@@ -66,6 +67,8 @@ import org.apache.solr.search.facet.RelatednessAgg;
 import org.apache.solr.search.facet.StddevAgg;
 import org.apache.solr.search.facet.SumAgg;
 import org.apache.solr.search.facet.SumsqAgg;
+import org.apache.solr.search.facet.TermFrequencyOfFrequenciesAgg;
+import org.apache.solr.search.facet.TopDocsAgg;
 import org.apache.solr.search.facet.UniqueAgg;
 import org.apache.solr.search.facet.UniqueBlockFieldAgg;
 import org.apache.solr.search.facet.UniqueBlockQueryAgg;
@@ -1092,6 +1095,12 @@ public abstract class ValueSourceParser implements NamedListInitializedPlugin {
       }
     });
     
+    addParser("agg_topdocs", new TopDocsAgg.Parser());
+
+    addParser("agg_termfreqfreq", new TermFrequencyOfFrequenciesAgg.Parser());
+
+    addParser("agg_bitmapcollector", new BitmapCollectorAgg.Parser());
+
     addParser("childfield", new ChildFieldValueSourceParser());
   }
 
