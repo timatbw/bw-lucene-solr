@@ -40,9 +40,6 @@ import org.slf4j.LoggerFactory;
  * the chain and prints them on finish().  At the Debug (FINE) level, a message
  * will be logged for each command prior to the next stage in the chain.
  * </p>
- * <p>
- * If the Log level is not &gt;= INFO the processor will not be created or added to the chain.
- * </p>
  *
  * @since solr 1.3
  */
@@ -62,8 +59,7 @@ public class LogUpdateProcessorFactory extends UpdateRequestProcessorFactory imp
 
   @Override
   public UpdateRequestProcessor getInstance(SolrQueryRequest req, SolrQueryResponse rsp, UpdateRequestProcessor next) {
-    return (log.isInfoEnabled() || slowUpdateThresholdMillis >= 0) ?
-        new LogUpdateProcessor(req, rsp, this, next) : next;
+    return new LogUpdateProcessor(req, rsp, this, next);
   }
   
   static class LogUpdateProcessor extends UpdateRequestProcessor {
@@ -198,6 +194,8 @@ public class LogUpdateProcessorFactory extends UpdateRequestProcessorFactory imp
 
       if (log.isInfoEnabled()) {
         log.info(getLogStringAndClearRspToLog());
+      } else {
+        rsp.getToLog().clear();
       }
 
       if (log.isWarnEnabled() && slowUpdateThresholdMillis >= 0) {
