@@ -26,6 +26,7 @@ import org.apache.solr.common.SolrException.ErrorCode;
 import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.core.SolrCore;
 import org.apache.solr.schema.FieldType;
+import org.apache.solr.schema.IndexSchema;
 import org.apache.solr.schema.SimilarityFactory;
 import org.apache.solr.util.plugin.SolrCoreAware;
 
@@ -137,20 +138,33 @@ public class SchemaSimilarityFactory extends SimilarityFactory implements SolrCo
   
   private class SchemaSimilarity extends PerFieldSimilarityWrapper {
     private Similarity defaultSimilarity;
+    private volatile IndexSchema schema;
 
     public SchemaSimilarity(Similarity defaultSimilarity) {
       this.defaultSimilarity = defaultSimilarity;
+      schema = core.getLatestSchema();
     }
 
     @Override
     public Similarity get(String name) {
-      FieldType fieldType = core.getLatestSchema().getFieldTypeNoEx(name);
+      FieldType fieldType = getSchema().getFieldTypeNoEx(name);
       if (fieldType == null) {
         return defaultSimilarity;
       } else {
         Similarity similarity = fieldType.getSimilarity();
         return similarity == null ? defaultSimilarity : similarity;
       }
+    }
+
+    private IndexSchema getSchema() {
+      // if we're using shareSchema in our config we might actually have an uninitialised
+      // SolrCore, so we cache the old schema to bridge the gap, but otherwise
+      // defer to the core itself (in case the schema changes)
+      IndexSchema latestSchema = core.getLatestSchema();
+      if (latestSchema != null && schema != latestSchema) {
+        schema = latestSchema;
+      }
+      return schema;
     }
 
     @Override
